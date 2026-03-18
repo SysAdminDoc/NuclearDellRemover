@@ -1,3 +1,5 @@
+<p align="center"><img src="icon.svg" width="128" height="128" alt="NuclearOEMRemover"></p>
+
 # NuclearOEMRemover
 
 Scorched-earth removal of **all** OEM pre-installed software from Windows 11. Supports **Dell**, **HP**, and **Lenovo** with automatic manufacturer detection. Eight-phase elimination covering every attack surface OEM bloatware uses to persist.
