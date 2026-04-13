@@ -2,6 +2,8 @@
 
 # NuclearOEMRemover
 
+![Version](https://img.shields.io/badge/version-v1.1.0-blue) ![License](https://img.shields.io/badge/license-MIT-green) ![Platform](https://img.shields.io/badge/platform-PowerShell-lightgrey)
+
 Scorched-earth removal of **all** OEM pre-installed software from Windows 11. Supports **Dell**, **HP**, and **Lenovo** with automatic manufacturer detection. Eight-phase elimination covering every attack surface OEM bloatware uses to persist.
 
 > Filename kept as `NuclearDellRemover.ps1` for backwards compatibility.
