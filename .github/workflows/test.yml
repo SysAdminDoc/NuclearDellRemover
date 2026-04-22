@@ -1,0 +1,58 @@
+name: tests
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - 'NuclearDellRemover.ps1'
+      - 'tests/**'
+      - 'Invoke-Tests.ps1'
+      - '.github/workflows/test.yml'
+  pull_request:
+    paths:
+      - 'NuclearDellRemover.ps1'
+      - 'tests/**'
+      - 'Invoke-Tests.ps1'
+      - '.github/workflows/test.yml'
+  workflow_dispatch:
+
+jobs:
+  pester:
+    name: Pester suite (Windows)
+    runs-on: windows-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Syntax parse
+        shell: pwsh
+        run: |
+          $errs = $null
+          [void][System.Management.Automation.Language.Parser]::ParseFile(
+              (Resolve-Path .\NuclearDellRemover.ps1).Path,
+              [ref]$null,
+              [ref]$errs)
+          if ($errs) {
+              $errs | ForEach-Object { Write-Host ("LINE {0}: {1}" -f $_.Extent.StartLineNumber, $_.Message) }
+              exit 1
+          }
+          Write-Host "Main script: parse OK"
+
+      - name: Install Pester 5
+        shell: pwsh
+        run: |
+          Install-Module Pester -MinimumVersion 5.0.0 -Force -SkipPublisherCheck -Scope CurrentUser
+          Get-Module -ListAvailable Pester | Select-Object Name, Version
+
+      - name: Run Pester suite
+        shell: pwsh
+        run: |
+          Import-Module Pester -MinimumVersion 5.0.0
+          $result = Invoke-Pester -Path .\tests\NuclearDellRemover.Tests.ps1 -PassThru -Output Detailed
+          if ($result.FailedCount -gt 0) {
+              Write-Host "FAILED: $($result.FailedCount) of $($result.TotalCount)" -ForegroundColor Red
+              exit 1
+          }
+          Write-Host "Passed: $($result.PassedCount) of $($result.TotalCount)" -ForegroundColor Green

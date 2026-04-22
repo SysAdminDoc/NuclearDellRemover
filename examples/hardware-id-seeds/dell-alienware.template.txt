@@ -1,0 +1,54 @@
+# Dell / Alienware hardware-ID seed template
+# ---------------------------------------------------------------------------
+# This file is a TEMPLATE. Every entry below is commented out. Do not enable
+# any line until you have verified on your own hardware that the ID refers
+# to an OEM-helper device you want to block, NOT a device your machine needs.
+#
+# Discovery command (run on a reference machine with everything connected):
+#   Get-PnpDevice | Where-Object {
+#       $_.FriendlyName -match 'Dell|Alienware|SupportAssist|PC-Doctor' -or
+#       $_.Manufacturer -match 'Dell|Alienware'
+#   } | ForEach-Object {
+#       $hwids = (Get-PnpDeviceProperty -InstanceId $_.InstanceId -KeyName DEVPKEY_Device_HardwareIds).Data
+#       [PSCustomObject]@{
+#           FriendlyName = $_.FriendlyName
+#           HardwareIds  = ($hwids -join '; ')
+#       }
+#   } | Format-Table -AutoSize -Wrap
+#
+# Format:
+#   - One hardware ID per line
+#   - '#' starts a comment (either at the start of a line or after an ID - no, comments must be own line)
+#   - Blank lines and whitespace-only lines ignored
+# ---------------------------------------------------------------------------
+
+
+# --- Alienware Command Center (AWCC) companion devices ---
+# The AWCC RGB / AlienFX lighting controller. Blocking this prevents the
+# AlienFX USB HID pipeline from reinstalling. WARNING: also breaks RGB lighting.
+# Vendor 187C = Alienware. Product IDs vary by generation.
+# USB\VID_187C&PID_0529
+# USB\VID_187C&PID_0511
+
+
+# --- Dell SupportAssist / Data Vault companions ---
+# Dell Data Vault driver (telemetry companion). Safe to block on machines where
+# SupportAssist has been removed; this stops Windows Update from re-pushing the
+# telemetry driver and triggering SupportAssist reinstall.
+# ROOT\DDVDD
+# ROOT\DDVSC
+
+
+# --- PC-Doctor hardware diagnostic module ---
+# PC-Doctor ships with SupportAssist as a diagnostic helper driver.
+# ROOT\PC-DOCTOR
+
+
+# --- Dell Peripheral Manager / Dell Pair companion devices ---
+# These ride along with Dell's wireless peripheral stack. Only block if you
+# are NOT using Dell wireless keyboards, mice, or headsets.
+# ROOT\DellPeripheralManager
+# ROOT\DellPair
+
+
+# End of template. Uncomment the lines you have verified for your fleet.
