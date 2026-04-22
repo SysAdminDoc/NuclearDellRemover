@@ -2,6 +2,18 @@
 
 All notable changes to NuclearOEMRemover are documented here.
 
+## [v1.4.2] - 2026-04-22
+
+PS2EXE compatibility release.
+
+### Added
+- The script now detects when it is running as a compiled `.exe` (ps2exe) and adapts the "spawn the engine in a child process" flow accordingly. In exe mode the GUI relaunches the exe itself with the engine switches instead of `powershell.exe -File <exe>`, which would fail. In `.ps1` mode behavior is unchanged.
+- `$Script:IsExeMode` flag derived from the script path extension with a fallback check on the host process name, and entry-assembly path resolution so `$Script:RepoRoot` still points at the exe's directory (where `icon.ico`/`icon.png` sit for side-by-side loading).
+
+### Changed
+- `Get-RunArguments` only emits the `-NoProfile -ExecutionPolicy Bypass -File <path>` wrapper arguments when running as `.ps1`. In exe mode those would be parsed as script parameters and fail.
+- `Start-Run` (GUI) picks `ProcessStartInfo.FileName` based on `$Script:IsExeMode`.
+
 ## [v1.4.1] - 2026-04-22
 
 Tooling, docs, and test-coverage refinement on top of 1.4.0. No new engine capability; operator ergonomics and maintainability only.

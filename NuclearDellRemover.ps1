@@ -111,7 +111,7 @@ if (-not $LoadOnly -and -not (Test-EngineIsAdministrator)) {
 # ============================================================================
 
 $Script:Config = @{
-    Version                  = "1.4.1"
+    Version                  = "1.4.2"
     StartTime                = Get-Date
     SupportAssistMinVersion  = "3.2.0.90"  # N-able gate: skip SA if >= this unless -Force
     # Authenticode publishers we trust when running installers from %ProgramData%\Package Cache.
@@ -3177,6 +3177,28 @@ namespace NuclearOEMRemover
 $Script:RepoRoot = Split-Path -Parent $PSCommandPath
 $Script:ScriptPath = $PSCommandPath
 if (-not $Script:ScriptPath) { $Script:ScriptPath = $MyInvocation.MyCommand.Path }
+
+# PS2EXE compatibility: when compiled, $PSCommandPath is the .exe path. Detect this so the
+# GUI can relaunch the exe directly (instead of `powershell.exe -File <exe>`).
+$Script:IsExeMode = $false
+try {
+    if ($Script:ScriptPath) {
+        $Script:IsExeMode = ([System.IO.Path]::GetExtension($Script:ScriptPath).ToLower() -eq '.exe')
+    }
+    # Fallback detection: when under ps2exe the host process isn't powershell.exe
+    if (-not $Script:IsExeMode) {
+        $procName = [System.Diagnostics.Process]::GetCurrentProcess().ProcessName
+        if ($procName -notmatch '^(powershell|pwsh|powershell_ise)$') {
+            $Script:IsExeMode = $true
+            $entry = [System.Reflection.Assembly]::GetEntryAssembly()
+            if ($entry -and $entry.Location) {
+                $Script:ScriptPath = $entry.Location
+                $Script:RepoRoot   = Split-Path -Parent $entry.Location
+            }
+        }
+    }
+} catch { }
+
 $Script:IconPath = Join-Path $Script:RepoRoot "icon.ico"
 $Script:BrandImagePath = Join-Path $Script:RepoRoot "icon.png"
 $Script:CurrentProcess = $null
@@ -3749,11 +3771,15 @@ function Get-SelectedOEM {
 
 function Get-RunArguments {
     $argumentList = New-Object System.Collections.Generic.List[string]
-    $argumentList.Add("-NoProfile")
-    $argumentList.Add("-ExecutionPolicy")
-    $argumentList.Add("Bypass")
-    $argumentList.Add("-File")
-    $argumentList.Add($Script:ScriptPath)
+    # Only add the powershell.exe wrapper args when we're launching powershell.exe.
+    # In exe mode (ps2exe) we launch the exe itself - those args would be interpreted as engine args.
+    if (-not $Script:IsExeMode) {
+        $argumentList.Add("-NoProfile")
+        $argumentList.Add("-ExecutionPolicy")
+        $argumentList.Add("Bypass")
+        $argumentList.Add("-File")
+        $argumentList.Add($Script:ScriptPath)
+    }
     $argumentList.Add("-InternalEngine")
     $argumentList.Add("-NoOpenReport")
     $argumentList.Add("-NoClearHost")
@@ -3960,7 +3986,8 @@ function Start-Run {
 
     $runArgs = Get-RunArguments
     $psi = New-Object System.Diagnostics.ProcessStartInfo
-    $psi.FileName = "powershell.exe"
+    # In exe mode, relaunch the compiled exe itself; otherwise use powershell.exe + the .ps1
+    $psi.FileName = if ($Script:IsExeMode) { $Script:ScriptPath } else { "powershell.exe" }
     $psi.Arguments = (($runArgs | ForEach-Object { ConvertTo-ProcessArgument $_ }) -join " ")
     $psi.WorkingDirectory = $Script:RepoRoot
     $psi.UseShellExecute = $false

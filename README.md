@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-v1.4.1-66A6FF?style=for-the-badge">
+  <img alt="Version" src="https://img.shields.io/badge/version-v1.4.2-66A6FF?style=for-the-badge">
   <img alt="License" src="https://img.shields.io/badge/license-MIT-5EE2A0?style=for-the-badge">
   <img alt="Platform" src="https://img.shields.io/badge/platform-PowerShell-66A6FF?style=for-the-badge">
 </p>
