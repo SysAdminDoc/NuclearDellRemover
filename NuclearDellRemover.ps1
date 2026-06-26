@@ -45,6 +45,11 @@ param(
     # trials are included in the cleanup. Pass this to leave them untouched.
     [switch]$SkipSecuritySuites,
 
+    # Public: path to a whitelist file. Apps/services/items whose names match any line in this
+    # file are preserved even if they match OEM patterns. One pattern per line, '#' for comments.
+    # Inverse of the default blacklist approach — useful for fresh-install fleets.
+    [string]$WhitelistFile,
+
     [Parameter(DontShow = $true)]
     [switch]$InternalEngine,
     [Parameter(DontShow = $true)]
@@ -103,6 +108,7 @@ if (-not $LoadOnly -and -not (Test-EngineIsAdministrator)) {
         if ($SkipResidueCleanup)         { $relaunchArgs += "-SkipResidueCleanup" }
         if ($SkipSignatureVerification)  { $relaunchArgs += "-SkipSignatureVerification" }
         if ($SkipSecuritySuites)         { $relaunchArgs += "-SkipSecuritySuites" }
+        if ($WhitelistFile)              { $relaunchArgs += @("-WhitelistFile", (& $quote $WhitelistFile)) }
         if ($OEM)                        { $relaunchArgs += @("-OEM", $OEM) }
         if ($HardwareIdSeedsFile)        { $relaunchArgs += @("-HardwareIdSeedsFile", (& $quote $HardwareIdSeedsFile)) }
         if ($PSBoundParameters.ContainsKey('LogPath'))          { $relaunchArgs += @("-LogPath",          (& $quote $LogPath)) }
@@ -771,6 +777,43 @@ function Get-HardwareIdSeedsFromFile {
 }
 
 # ============================================================================
+# WHITELIST FILE LOADER
+# ============================================================================
+# Reads preserve patterns from a text file. Apps/services matching any pattern are kept.
+
+$Script:WhitelistPatterns = @()
+
+function Initialize-Whitelist {
+    param([string]$Path)
+    if ([string]::IsNullOrWhiteSpace($Path)) { return }
+    if (-not (Test-Path -LiteralPath $Path)) {
+        Write-RunLog "WhitelistFile not found: $Path" -Level WARN
+        return
+    }
+    try {
+        $lines = Get-Content -LiteralPath $Path -ErrorAction Stop
+        $patterns = foreach ($line in $lines) {
+            $trimmed = $line.Trim()
+            if ($trimmed -eq '' -or $trimmed.StartsWith('#')) { continue }
+            $trimmed
+        }
+        $Script:WhitelistPatterns = @($patterns)
+        Write-RunLog "Loaded $(@($Script:WhitelistPatterns).Count) whitelist patterns from $Path" -Level INFO
+    } catch {
+        Write-RunLog "Failed reading whitelist from ${Path}: $($_.Exception.Message)" -Level WARN
+    }
+}
+
+function Test-IsWhitelisted {
+    param([Parameter(Mandatory)][string]$Name)
+    if ($Script:WhitelistPatterns.Count -eq 0) { return $false }
+    foreach ($pattern in $Script:WhitelistPatterns) {
+        if ($Name -like $pattern) { return $true }
+    }
+    return $false
+}
+
+# ============================================================================
 # AUTHENTICODE SIGNATURE VERIFICATION
 # ============================================================================
 # Checks a file has a valid Authenticode signature from one of our trusted OEM publishers.
@@ -1158,6 +1201,11 @@ function Remove-OEMServices {
     }
 
     foreach ($svc in $oemServices) {
+        if (Test-IsWhitelisted -Name $svc.DisplayName) {
+            Write-RunLog "Preserving (whitelist): $($svc.DisplayName) [$($svc.Name)]" -Level INFO
+            Add-ReportItem -Phase "Services" -Item "$($svc.DisplayName) [$($svc.Name)]" -Status Skipped -Detail "Preserved by whitelist"
+            continue
+        }
         Write-RunLog "Processing service: $($svc.DisplayName) [$($svc.Name)]" -Level INFO
 
         if (-not $DryRun) {
@@ -1228,6 +1276,11 @@ function Remove-OEMAppxPackages {
         # Remove installed packages for all users
         $packages = Get-AppxPackage -AllUsers -Name $pattern -ErrorAction SilentlyContinue
         foreach ($pkg in $packages) {
+            if (Test-IsWhitelisted -Name $pkg.Name) {
+                Write-RunLog "Preserving (whitelist): $($pkg.Name)" -Level INFO
+                Add-ReportItem -Phase "AppX" -Item $pkg.Name -Status Skipped -Detail "Preserved by whitelist"
+                continue
+            }
             if (-not $DryRun) {
                 try {
                     Write-RunLog "Removing AppX: $($pkg.Name)" -Level INFO
@@ -1371,6 +1424,12 @@ function Remove-OEMWin32Apps {
     $oemApps = $oemApps | Sort-Object DisplayName -Unique
 
     foreach ($app in $oemApps) {
+        if ($app.DisplayName -and (Test-IsWhitelisted -Name $app.DisplayName)) {
+            Write-RunLog "Preserving (whitelist): $($app.DisplayName)" -Level INFO
+            Add-ReportItem -Phase "Win32" -Item $app.DisplayName -Status Skipped -Detail "Preserved by whitelist"
+            continue
+        }
+
         # Preserve Dell Command Update if the operator opted in
         if (Test-ShouldPreserveApp -App $app -Targets $Targets) {
             Write-RunLog "Preserving (KeepDellCommandUpdate): $($app.DisplayName)" -Level INFO
@@ -3141,6 +3200,7 @@ function Invoke-NuclearOEMRemover {
     # Resolve targets
     $targetOEMs = Get-TargetOEMs
     $mergedTargets = Build-MergedConfig -TargetOEMs $targetOEMs
+    Initialize-Whitelist -Path $WhitelistFile
     Show-RunOverview -TargetOEMs $targetOEMs -IsDryRun ([bool]$DryRun)
 
     Write-RunLog "NuclearOEMRemover v$($Script:Config.Version) starting..." -Level INFO
