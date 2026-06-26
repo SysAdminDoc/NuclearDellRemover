@@ -836,6 +836,21 @@ function Write-DryRun {
 }
 
 # ============================================================================
+# UNINSTALL STRING SANITIZATION
+# ============================================================================
+# Registry-sourced UninstallString/QuietUninstallString values are untrusted input.
+# A malicious app could register a crafted string containing shell operators.
+# Reject strings with command-chaining or redirection operators before passing to cmd.exe.
+
+function Test-UninstallStringIsSafe {
+    param([Parameter(Mandatory)][string]$Value)
+    if ($Value -match '[&|><;]|``') {
+        return $false
+    }
+    return $true
+}
+
+# ============================================================================
 # PHASE 1: KILL OEM PROCESSES
 # ============================================================================
 
@@ -1153,6 +1168,17 @@ function Remove-OEMWin32Apps {
             $process = $null
 
             try {
+                if ($quietUninstall -and -not (Test-UninstallStringIsSafe -Value $quietUninstall)) {
+                    Write-RunLog "  Rejected QuietUninstallString for $($app.DisplayName) - contains shell operators" -Level WARN
+                    Add-ReportItem -Phase "Win32" -Item $app.DisplayName -Status Skipped -Detail "QuietUninstallString rejected (shell operators)"
+                    $quietUninstall = $null
+                }
+                if ($uninstallString -and -not (Test-UninstallStringIsSafe -Value $uninstallString)) {
+                    Write-RunLog "  Rejected UninstallString for $($app.DisplayName) - contains shell operators" -Level WARN
+                    Add-ReportItem -Phase "Win32" -Item $app.DisplayName -Status Skipped -Detail "UninstallString rejected (shell operators)"
+                    continue
+                }
+
                 if ($quietUninstall) {
                     Write-RunLog "  Using quiet uninstall" -Level INFO
                     $process = Start-Process cmd.exe -ArgumentList "/c `"$quietUninstall`"" -Wait -PassThru -WindowStyle Hidden
@@ -2807,7 +2833,7 @@ function New-HTMLReport {
       <div class="section-header">
         <div>
           <h2 id="summary-heading">Phase Summary</h2>
-          <p class="section-note">$totalProcessed total actions recorded across 8 cleanup phases.</p>
+          <p class="section-note">$totalProcessed total actions recorded across $($summaryRows.Count) cleanup phases.</p>
         </div>
       </div>
       <div class="metric-grid">

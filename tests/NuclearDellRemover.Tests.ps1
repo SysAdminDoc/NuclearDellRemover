@@ -397,3 +397,29 @@ Describe "Build-MergedConfig dedup behavior" {
         }
     }
 }
+
+Describe "Test-UninstallStringIsSafe" {
+    It "accepts a normal uninstall path" {
+        Test-UninstallStringIsSafe -Value 'C:\Program Files\Dell\SupportAssist\Uninstall.exe' | Should -BeTrue
+    }
+
+    It "accepts an msiexec uninstall string" {
+        Test-UninstallStringIsSafe -Value 'MsiExec.exe /X{12345678-1234-1234-1234-123456789012}' | Should -BeTrue
+    }
+
+    It "rejects ampersand command chaining" {
+        Test-UninstallStringIsSafe -Value 'uninstall.exe & malicious.exe' | Should -BeFalse
+    }
+
+    It "rejects pipe operator" {
+        Test-UninstallStringIsSafe -Value 'uninstall.exe | evil.exe' | Should -BeFalse
+    }
+
+    It "rejects redirect operator" {
+        Test-UninstallStringIsSafe -Value 'uninstall.exe > nul' | Should -BeFalse
+    }
+
+    It "rejects semicolon chaining" {
+        Test-UninstallStringIsSafe -Value 'uninstall.exe; del C:\' | Should -BeFalse
+    }
+}
