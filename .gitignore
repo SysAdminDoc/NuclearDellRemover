@@ -3,6 +3,7 @@
 *.tmp
 .vs/
 CLAUDE.md
+dist/
 
 # Markdown files local-only (except README)
 *.md
