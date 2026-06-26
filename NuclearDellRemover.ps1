@@ -173,6 +173,7 @@ $Script:OEMTargets = @{
         ServicePatterns = @("*Dell*", "*SupportAssist*", "*DDV*", "*PCDR*", "*TechHub*", "*DellClientManagement*", "*Dell Trusted*", "*Dell Device Management*", "*Dell Peripheral*", "*DDPM*")
         ServiceNames    = @(
             "DellSupportAssistAgent", "Dell SupportAssist Remediation",
+            "DellSupportAssistRemedationService",
             "DDVDataCollector", "DDVRulesProcessor", "DDVCollectorSvcApi",
             "DellOptimizerService", "DellPowerManager", "DellUpdate",
             "DellClientManagementService", "DellTechHub", "DellAnalytics",
@@ -1238,7 +1239,7 @@ function Write-DryRun {
 
 function Test-UninstallStringIsSafe {
     param([Parameter(Mandatory)][string]$Value)
-    if ($Value -match '[&|><;]|``') {
+    if ($Value -match '[&|><;]|``|%[A-Za-z0-9_]+%') {
         return $false
     }
     return $true
@@ -3619,6 +3620,13 @@ if ([Threading.Thread]::CurrentThread.ApartmentState -ne "STA") {
 if (-not (Test-IsAdministrator)) {
     Invoke-SelfRelaunch -RequireElevation $true
 }
+
+# Set DPI awareness before creating any WPF windows to prevent bitmap scaling/blur
+# on high-DPI displays (150%+ scaling standard on Dell XPS, HP Spectre, Lenovo X1 Carbon)
+try {
+    Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public class DPIUtil { [DllImport("user32.dll")] public static extern bool SetProcessDPIAware(); }' -ErrorAction SilentlyContinue
+    [DPIUtil]::SetProcessDPIAware() | Out-Null
+} catch { }
 
 Add-Type -AssemblyName PresentationCore, PresentationFramework, WindowsBase
 

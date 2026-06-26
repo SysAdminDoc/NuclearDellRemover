@@ -415,4 +415,12 @@ Describe "Test-UninstallStringIsSafe" {
     It "rejects semicolon chaining" {
         Test-UninstallStringIsSafe -Value 'uninstall.exe; del C:\' | Should -BeFalse
     }
+
+    It "rejects percent-wrapped environment variable expansion" {
+        Test-UninstallStringIsSafe -Value '%COMSPEC% /c malicious.exe' | Should -BeFalse
+    }
+
+    It "accepts paths with parentheses (Program Files x86)" {
+        Test-UninstallStringIsSafe -Value 'C:\Program Files (x86)\Dell\Uninstall.exe' | Should -BeTrue
+    }
 }
