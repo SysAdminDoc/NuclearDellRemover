@@ -138,7 +138,7 @@ if (-not $LoadOnly -and -not (Test-EngineIsAdministrator)) {
 # ============================================================================
 
 $Script:Config = @{
-    Version                  = "1.4.2"
+    Version                  = "1.5.0"
     StartTime                = Get-Date
     SupportAssistMinVersion  = "3.2.0.90"  # N-able gate: skip SA if >= this unless -Force
     # Authenticode publishers we trust when running installers from %ProgramData%\Package Cache.
