@@ -72,8 +72,17 @@ function Test-EngineIsAdministrator {
     return $principal.IsInRole([System.Security.Principal.WindowsBuiltInRole]::Administrator)
 }
 
+function Test-IsSystemAccount {
+    $sid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User
+    return ($sid -and $sid.Value -eq 'S-1-5-18')
+}
+
 if (-not $LoadOnly -and -not (Test-EngineIsAdministrator)) {
     if ($Unattended) {
+        if (Test-IsSystemAccount) {
+            Write-Error "Running under SYSTEM but not Administrator. This should not happen. Exiting."
+            exit 1
+        }
         # Attempt elevated self-relaunch in headless mode. Forward every passed switch + path so nothing is lost.
         $quote = { param($s) if ($s -match '[\s"]') { '"' + ($s -replace '"','\"') + '"' } else { $s } }
         $relaunchArgs = @(
@@ -2281,7 +2290,7 @@ function New-HTMLReport {
     if ($Results.ContainsKey("ResidueItems")) { $residueCount = [int]$Results.ResidueItems }
 
     $summaryRows = @(
-        [PSCustomObject]@{ Phase = "Processes";   Count = $Results.Processes + $Results.ProcessesSecondPass; Detail = $summaryDetails.Processes },
+        [PSCustomObject]@{ Phase = "Processes";   Count = $Results.Processes + $Results.ProcessesSecondPass + $Results.ProcessesThirdPass; Detail = $summaryDetails.Processes },
         [PSCustomObject]@{ Phase = "Services";    Count = $Results.Services; Detail = $summaryDetails.Services },
         [PSCustomObject]@{ Phase = "AppX";        Count = $Results.AppxPackages; Detail = $summaryDetails.AppX },
         [PSCustomObject]@{ Phase = "Win32 Apps";  Count = $Results.Win32Apps; Detail = $summaryDetails.Win32 },
@@ -2982,16 +2991,17 @@ function Invoke-NuclearOEMRemover {
 
     # Results tracking
     $results = @{
-        Processes          = 0
+        Processes           = 0
         ProcessesSecondPass = 0
-        Services           = 0
-        AppxPackages       = 0
-        Win32Apps          = 0
-        ScheduledTasks     = 0
-        RegistryItems      = 0
-        FilesystemItems    = 0
-        ReinstallBlocks    = 0
-        ResidueItems       = 0
+        ProcessesThirdPass  = 0
+        Services            = 0
+        AppxPackages        = 0
+        Win32Apps           = 0
+        ScheduledTasks      = 0
+        RegistryItems       = 0
+        FilesystemItems     = 0
+        ReinstallBlocks     = 0
+        ResidueItems        = 0
     }
 
     # Execute all phases in a try/finally so undo manifest is always persisted even on a mid-run throw.
@@ -3011,6 +3021,16 @@ function Invoke-NuclearOEMRemover {
 
         $results.AppxPackages    = Remove-OEMAppxPackages     -Targets $mergedTargets
         $results.Win32Apps       = Remove-OEMWin32Apps        -Targets $mergedTargets
+
+        # Third process kill - persistent agents (HP Support Assistant, Lenovo ImController)
+        # can respawn during Win32 uninstallation
+        Write-RunLog -Message "PHASE 4.5: Third Process Kill (Post-Uninstall Sweep)" -Level PHASE
+        if (-not $DryRun) { Start-Sleep -Seconds 1 }
+        $results.ProcessesThirdPass = Stop-OEMProcesses -Targets $mergedTargets
+        if ($results.ProcessesThirdPass -gt 0) {
+            Write-RunLog "Caught $($results.ProcessesThirdPass) post-uninstall respawned processes" -Level SUCCESS
+        }
+
         $results.ScheduledTasks  = Remove-OEMScheduledTasks   -Targets $mergedTargets
         $results.RegistryItems   = Remove-OEMRegistry         -Targets $mergedTargets
         $results.FilesystemItems = Remove-OEMFilesystem       -Targets $mergedTargets
@@ -3045,7 +3065,7 @@ function Invoke-NuclearOEMRemover {
 
     if ($DryRun) {
         $tableData = @(
-            @{ Phase = "Processes Found";    Count = $results.Processes + $results.ProcessesSecondPass },
+            @{ Phase = "Processes Found";    Count = $results.Processes + $results.ProcessesSecondPass + $results.ProcessesThirdPass },
             @{ Phase = "Services Found";     Count = $results.Services },
             @{ Phase = "AppX Found";         Count = $results.AppxPackages },
             @{ Phase = "Win32 Checks";       Count = $results.Win32Apps },
@@ -3057,7 +3077,7 @@ function Invoke-NuclearOEMRemover {
         )
     } else {
         $tableData = @(
-            @{ Phase = "Processes Killed";    Count = $results.Processes + $results.ProcessesSecondPass },
+            @{ Phase = "Processes Killed";    Count = $results.Processes + $results.ProcessesSecondPass + $results.ProcessesThirdPass },
             @{ Phase = "Services Removed";    Count = $results.Services },
             @{ Phase = "AppX Removed";        Count = $results.AppxPackages },
             @{ Phase = "Win32 Uninstalled";   Count = $results.Win32Apps },
