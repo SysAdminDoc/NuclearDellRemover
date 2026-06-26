@@ -910,6 +910,7 @@ function Stop-OEMProcesses {
                     $proc | Stop-Process -Force -ErrorAction Stop
                     Write-RunLog "Terminated process: $($proc.Name) (PID: $($proc.Id))" -Level SUCCESS
                     Add-ReportItem -Phase "Processes" -Item "$($proc.Name) (PID: $($proc.Id))" -Status Removed
+                    Add-UndoEntry -Phase "Processes" -Action "KillProcess" -Target "$($proc.Name) (PID: $($proc.Id))"
                     $killed++
                 } catch {
                     Write-RunLog "Failed to terminate: $($proc.Name) - $($_.Exception.Message)" -Level WARN
@@ -998,6 +999,7 @@ function Remove-OEMServices {
                 if ($LASTEXITCODE -eq 0) {
                     Write-RunLog "  Deleted service" -Level SUCCESS
                     Add-ReportItem -Phase "Services" -Item "$($svc.DisplayName) [$($svc.Name)]" -Status Removed
+                    Add-UndoEntry -Phase "Services" -Action "DeleteService" -Target $svc.Name -Before $svc.DisplayName
                     $removed++
                 } else {
                     Write-RunLog "  Delete pending (may require reboot)" -Level WARN
@@ -1046,6 +1048,7 @@ function Remove-OEMAppxPackages {
                     $pkg | Remove-AppxPackage -AllUsers -ErrorAction Stop
                     Write-RunLog "  Removed for all users" -Level SUCCESS
                     Add-ReportItem -Phase "AppX" -Item $pkg.Name -Status Removed
+                    Add-UndoEntry -Phase "AppX" -Action "RemoveAppx" -Target $pkg.Name -Before $pkg.Version
                     $removed++
                 } catch {
                     Write-RunLog "  Failed: $($_.Exception.Message)" -Level WARN
@@ -1053,6 +1056,7 @@ function Remove-OEMAppxPackages {
                         $pkg | Remove-AppxPackage -ErrorAction Stop
                         Write-RunLog "  Removed for current user only" -Level SUCCESS
                         Add-ReportItem -Phase "AppX" -Item $pkg.Name -Status Removed -Detail "Current user only"
+                        Add-UndoEntry -Phase "AppX" -Action "RemoveAppx" -Target $pkg.Name -Before $pkg.Version -After "current-user-only"
                         $removed++
                     } catch {
                         Write-RunLog "  Complete failure: $($_.Exception.Message)" -Level ERROR
@@ -1077,6 +1081,7 @@ function Remove-OEMAppxPackages {
                     Remove-AppxProvisionedPackage -Online -PackageName $pkg.PackageName -ErrorAction Stop | Out-Null
                     Write-RunLog "  Removed provisioned package" -Level SUCCESS
                     Add-ReportItem -Phase "AppX" -Item "$($pkg.DisplayName) (provisioned)" -Status Removed
+                    Add-UndoEntry -Phase "AppX" -Action "RemoveProvisioned" -Target $pkg.DisplayName -Before $pkg.PackageName
                     $removed++
                 } catch {
                     Write-RunLog "  Failed: $($_.Exception.Message)" -Level WARN
@@ -1443,6 +1448,7 @@ function Remove-OEMScheduledTasks {
                 $task | Unregister-ScheduledTask -Confirm:$false -ErrorAction Stop
                 Write-RunLog "  Removed" -Level SUCCESS
                 Add-ReportItem -Phase "Tasks" -Item "$($task.TaskPath)$($task.TaskName)" -Status Removed
+                Add-UndoEntry -Phase "Tasks" -Action "DeleteTask" -Target "$($task.TaskPath)$($task.TaskName)"
                 $removed++
             } catch {
                 Write-RunLog "  Failed: $($_.Exception.Message)" -Level WARN
@@ -1465,6 +1471,7 @@ function Remove-OEMScheduledTasks {
                 $rootFolder.DeleteFolder($folder, 0)
                 Write-RunLog "Removed '$folder' scheduled task folder" -Level SUCCESS
                 Add-ReportItem -Phase "Tasks" -Item "Task folder: \$folder" -Status Removed
+                Add-UndoEntry -Phase "Tasks" -Action "DeleteTaskFolder" -Target "\$folder"
                 $removed++
             } catch {
                 Write-Verbose "Scheduled task folder '$folder' was not removed: $($_.Exception.Message)"
@@ -1506,6 +1513,7 @@ function Remove-OEMRegistry {
                     Remove-Item -Path $path -Recurse -Force -ErrorAction Stop
                     Write-RunLog "  Removed" -Level SUCCESS
                     Add-ReportItem -Phase "Registry" -Item $path -Status Removed
+                    Add-UndoEntry -Phase "Registry" -Action "DeleteKey" -Target $path
                     $removed++
                 } catch {
                     Write-RunLog "  Failed: $($_.Exception.Message)" -Level WARN
@@ -1535,9 +1543,11 @@ function Remove-OEMRegistry {
                 } | ForEach-Object {
                     if (-not $DryRun) {
                         try {
+                            $oldValue = $_.Value
                             Remove-ItemProperty -Path $key -Name $_.Name -Force -ErrorAction Stop
                             Write-RunLog "Removed Run entry: $($_.Name)" -Level SUCCESS
                             Add-ReportItem -Phase "Registry" -Item "Run: $($_.Name)" -Status Removed
+                            Add-UndoEntry -Phase "Registry" -Action "DeleteRunValue" -Target "$key\$($_.Name)" -Before $oldValue
                             $removed++
                         } catch {
                             Write-RunLog "Failed to remove Run entry: $($_.Name)" -Level WARN
@@ -1599,6 +1609,7 @@ function Remove-OEMFilesystem {
                     Remove-Item -Path $path -Recurse -Force -ErrorAction Stop
                     Write-RunLog "  Removed" -Level SUCCESS
                     Add-ReportItem -Phase "Filesystem" -Item $path -Status Removed
+                    Add-UndoEntry -Phase "Filesystem" -Action "RemoveDir" -Target $path
                     $removed++
                 } catch {
                     try {
@@ -1609,6 +1620,7 @@ function Remove-OEMFilesystem {
                         Remove-Item $emptyDir -Force -ErrorAction SilentlyContinue
                         Write-RunLog "  Removed (robocopy method)" -Level SUCCESS
                         Add-ReportItem -Phase "Filesystem" -Item "$path (robocopy)" -Status Removed
+                        Add-UndoEntry -Phase "Filesystem" -Action "RemoveDir" -Target $path
                         $removed++
                     } catch {
                         Write-RunLog "  Failed: $($_.Exception.Message)" -Level WARN
@@ -1710,6 +1722,7 @@ function Remove-OEMFilesystem {
                         Remove-Item $_.FullName -Recurse -Force -ErrorAction Stop
                         Write-RunLog "Removed Start Menu: $($_.Name)" -Level SUCCESS
                         Add-ReportItem -Phase "Filesystem" -Item "Start Menu: $($_.Name)" -Status Removed
+                        Add-UndoEntry -Phase "Filesystem" -Action "RemoveStartMenu" -Target $_.FullName
                         $removed++
                     } catch {
                         Write-RunLog "Failed to remove Start Menu item: $($_.Name)" -Level WARN
