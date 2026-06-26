@@ -58,13 +58,32 @@ jobs:
           Install-Module Pester -MinimumVersion 5.0.0 -Force -SkipPublisherCheck -Scope CurrentUser
           Get-Module -ListAvailable Pester | Select-Object Name, Version
 
-      - name: Run Pester suite
+      - name: Run Pester suite with code coverage
         shell: pwsh
         run: |
           Import-Module Pester -MinimumVersion 5.0.0
-          $result = Invoke-Pester -Path .\tests\NuclearDellRemover.Tests.ps1 -PassThru -Output Detailed
+          $config = New-PesterConfiguration
+          $config.Run.Path = '.\tests\NuclearDellRemover.Tests.ps1'
+          $config.Run.PassThru = $true
+          $config.Output.Verbosity = 'Detailed'
+          $config.CodeCoverage.Enabled = $true
+          $config.CodeCoverage.Path = @('.\NuclearDellRemover.ps1')
+          $config.CodeCoverage.OutputFormat = 'JaCoCo'
+          $config.CodeCoverage.OutputPath = '.\coverage.xml'
+          $result = Invoke-Pester -Configuration $config
           if ($result.FailedCount -gt 0) {
               Write-Host "FAILED: $($result.FailedCount) of $($result.TotalCount)" -ForegroundColor Red
               exit 1
           }
+          $cc = $result.CodeCoverage
+          $pct = if ($cc.CommandsAnalyzedCount -gt 0) { [math]::Round(($cc.CommandsExecutedCount / $cc.CommandsAnalyzedCount) * 100, 1) } else { 0 }
           Write-Host "Passed: $($result.PassedCount) of $($result.TotalCount)" -ForegroundColor Green
+          Write-Host "Code coverage: $pct% ($($cc.CommandsExecutedCount)/$($cc.CommandsAnalyzedCount) commands)" -ForegroundColor Cyan
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage.xml
+          retention-days: 30

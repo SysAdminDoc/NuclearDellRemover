@@ -1,0 +1,43 @@
+{
+    "Dell": {
+        "ProcessPatterns": ["*Dell*", "*SupportAssist*", "*Alienware*"],
+        "ServicePatterns": ["*Dell*", "*SupportAssist*"],
+        "ServiceNames": [
+            "DellSupportAssistAgent",
+            "Dell SupportAssist Remediation",
+            "DellSupportAssistRemedationService",
+            "DellOptimizerService"
+        ],
+        "AppxPatterns": ["*Dell*", "*DellInc*"],
+        "Win32Patterns": ["*Dell*", "*SupportAssist*", "*Alienware*"],
+        "WingetApps": [
+            "Dell SupportAssist",
+            "Dell Optimizer"
+        ],
+        "TaskPatterns": ["*Dell*", "*SupportAssist*"],
+        "TaskFolders": ["Dell"],
+        "RegistryPaths": [
+            "HKLM:\\SOFTWARE\\Dell",
+            "HKLM:\\SOFTWARE\\Wow6432Node\\Dell"
+        ],
+        "RunKeyPatterns": ["*Dell*", "*SupportAssist*"],
+        "FilesystemPaths": [
+            "C:\\Program Files\\Dell",
+            "C:\\Program Files (x86)\\Dell"
+        ],
+        "StartMenuPatterns": ["*Dell*"],
+        "ManualUninstallers": [
+            {
+                "Name": "Dell SupportAssist Agent",
+                "Path": "C:\\Program Files\\Dell\\SupportAssistAgent\\bin\\SupportAssistUninstaller.exe",
+                "Arguments": "/S"
+            }
+        ],
+        "KeepOnPreserve": ["*Dell Command*Update*", "*DellCommandUpdate*"],
+        "ProfileRelativePaths": [
+            "AppData\\Local\\Dell",
+            "AppData\\Roaming\\Dell"
+        ],
+        "HardwareIdSeeds": []
+    }
+}

@@ -424,3 +424,85 @@ Describe "Test-UninstallStringIsSafe" {
         Test-UninstallStringIsSafe -Value 'C:\Program Files (x86)\Dell\Uninstall.exe' | Should -BeTrue
     }
 }
+
+Describe "Test-IsWhitelisted" {
+    BeforeEach {
+        $Script:WhitelistPatterns = @()
+    }
+
+    It "returns false when whitelist is empty" {
+        Test-IsWhitelisted -Name 'Dell SupportAssist' | Should -BeFalse
+    }
+
+    It "returns true for an exact pattern match" {
+        $Script:WhitelistPatterns = @('Dell SupportAssist')
+        Test-IsWhitelisted -Name 'Dell SupportAssist' | Should -BeTrue
+    }
+
+    It "returns true for a wildcard match" {
+        $Script:WhitelistPatterns = @('*CommandUpdate*')
+        Test-IsWhitelisted -Name 'Dell Command Update' | Should -BeFalse
+        Test-IsWhitelisted -Name 'DellCommandUpdate' | Should -BeTrue
+    }
+
+    It "returns false when no patterns match" {
+        $Script:WhitelistPatterns = @('HP*', 'Lenovo*')
+        Test-IsWhitelisted -Name 'Dell SupportAssist' | Should -BeFalse
+    }
+
+    AfterAll {
+        $Script:WhitelistPatterns = @()
+    }
+}
+
+Describe "Test-IsSystemAccount" {
+    It "returns false for non-SYSTEM accounts" {
+        Test-IsSystemAccount | Should -BeFalse
+    }
+}
+
+Describe "Initialize-Whitelist" {
+    BeforeAll {
+        $script:wlTmp = Join-Path $env:TEMP "nor-wl-$([Guid]::NewGuid().ToString('N')).txt"
+    }
+    AfterAll {
+        $Script:WhitelistPatterns = @()
+        if (Test-Path -LiteralPath $script:wlTmp) { Remove-Item -LiteralPath $script:wlTmp -Force }
+    }
+
+    It "loads patterns from a file, ignoring blanks and comments" {
+        @(
+            '# Keep Dell Command Update',
+            '*DellCommandUpdate*',
+            '',
+            'HP Support Assistant',
+            '  # indented comment'
+        ) | Set-Content -LiteralPath $script:wlTmp -Encoding UTF8
+        Initialize-Whitelist -Path $script:wlTmp
+        @($Script:WhitelistPatterns).Count | Should -Be 2
+        $Script:WhitelistPatterns | Should -Contain '*DellCommandUpdate*'
+        $Script:WhitelistPatterns | Should -Contain 'HP Support Assistant'
+    }
+
+    It "handles missing file gracefully" {
+        $Script:WhitelistPatterns = @()
+        Initialize-Whitelist -Path "$env:TEMP\does-not-exist-$([Guid]::NewGuid().ToString('N')).txt"
+        @($Script:WhitelistPatterns).Count | Should -Be 0
+    }
+}
+
+Describe "Export-PreRunInventory" {
+    It "writes a JSON file with expected top-level keys" {
+        $targets = Build-MergedConfig -TargetOEMs @() -IncludeSecuritySuites $false
+        $path = Join-Path $env:TEMP "nor-inv-$([Guid]::NewGuid().ToString('N')).json"
+        try {
+            Export-PreRunInventory -Targets $targets -OutputPath $path
+            Test-Path -LiteralPath $path | Should -BeTrue
+            $inv = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json
+            $inv.Timestamp | Should -Not -BeNullOrEmpty
+            $inv.Computer  | Should -Be $env:COMPUTERNAME
+        } finally {
+            if (Test-Path -LiteralPath $path) { Remove-Item -LiteralPath $path -Force }
+        }
+    }
+}
