@@ -140,7 +140,7 @@ if (-not $LoadOnly -and -not (Test-EngineIsAdministrator)) {
 # ============================================================================
 
 $Script:Config = @{
-    Version                  = "1.5.0"
+    Version                  = "1.5.1"
     StartTime                = Get-Date
     # SupportAssist version gate removed in v1.5.1 — SA Remediation v5.5.16.0 caused
     # CRITICAL_PROCESS_DIED BSOD loops (Dell KB000464214, May 2026). All SA versions
