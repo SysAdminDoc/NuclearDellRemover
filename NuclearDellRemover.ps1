@@ -1142,37 +1142,36 @@ function Export-IntuneScriptPair {
         New-Item -ItemType Directory -Path $OutputDir -Force | Out-Null
     }
 
-    $appPatterns = ($Targets.Win32Patterns | ForEach-Object { "`"$_`"" }) -join ', '
-    $appxPatterns = ($Targets.AppxPatterns | ForEach-Object { "`"$_`"" }) -join ', '
+    $appPatternsList = ($Targets.Win32Patterns | ForEach-Object { "'$_'" }) -join ', '
+    $appxPatternsList = ($Targets.AppxPatterns | ForEach-Object { "'$_'" }) -join ', '
 
-    $detectionScript = @"
+    $detectionScript = @'
 # NuclearOEMRemover Intune Detection Script
-# Exits 0 + STDOUT if OEM bloatware is detected (app is "installed" = needs remediation)
-# Exits 0 with no STDOUT if clean (app is "not installed")
-`$patterns = @($appPatterns)
-`$appxPatterns = @($appxPatterns)
-`$found = @()
-foreach (`$p in `$patterns) {
-    `$apps = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*","HKLM:\SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*" -ErrorAction SilentlyContinue |
-        Where-Object { `$_.DisplayName -like `$p }
-    if (`$apps) { `$found += `$apps.DisplayName }
+# Exits 0 + STDOUT if OEM bloatware is detected, exits 0 with no STDOUT if clean
+'@ + "`n" + "`$patterns = @($appPatternsList)" + "`n" + "`$appxPatterns = @($appxPatternsList)" + @'
+
+$found = @()
+foreach ($p in $patterns) {
+    $apps = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*","HKLM:\SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*" -ErrorAction SilentlyContinue |
+        Where-Object { $_.DisplayName -like $p }
+    if ($apps) { $found += $apps.DisplayName }
 }
-foreach (`$p in `$appxPatterns) {
-    `$pkgs = Get-AppxPackage -AllUsers -Name `$p -ErrorAction SilentlyContinue
-    if (`$pkgs) { `$found += `$pkgs.Name }
+foreach ($p in $appxPatterns) {
+    $pkgs = Get-AppxPackage -AllUsers -Name $p -ErrorAction SilentlyContinue
+    if ($pkgs) { $found += $pkgs.Name }
 }
-if (`$found.Count -gt 0) {
-    Write-Output "OEM bloatware detected: `$(`$found -join ', ')"
+if ($found.Count -gt 0) {
+    Write-Output "OEM bloatware detected: $($found -join ', ')"
     exit 0
 }
 exit 0
-"@
+'@
 
-    $remediationScript = @"
+    $remediationScript = @'
 # NuclearOEMRemover Intune Remediation Script
 # Downloads and runs NuclearOEMRemover in unattended mode
-powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "& { irm https://raw.githubusercontent.com/SysAdminDoc/NuclearDellRemover/main/NuclearDellRemover.ps1 -OutFile `$env:TEMP\NuclearOEMRemover.ps1; & `$env:TEMP\NuclearOEMRemover.ps1 -Unattended -SkipRestorePoint }"
-"@
+powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "& { irm https://raw.githubusercontent.com/SysAdminDoc/NuclearDellRemover/main/NuclearDellRemover.ps1 -OutFile $env:TEMP\NuclearOEMRemover.ps1; & $env:TEMP\NuclearOEMRemover.ps1 -Unattended -SkipRestorePoint }"
+'@
 
     $detectionPath = Join-Path $OutputDir "Detect-OEMBloatware.ps1"
     $remediationPath = Join-Path $OutputDir "Remediate-OEMBloatware.ps1"
@@ -3340,6 +3339,24 @@ function Invoke-NuclearOEMRemover {
     $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
     $inventoryPath = Join-Path $env:TEMP "NuclearOEMRemover-Inventory-$timestamp.json"
     Export-PreRunInventory -Targets $mergedTargets -OutputPath $inventoryPath
+
+    # Driver backup - export all third-party drivers before cleanup removes OEM driver packages
+    if (-not $DryRun) {
+        $driverBackupPath = Join-Path $env:TEMP "NuclearOEMRemover-DriverBackup-$timestamp"
+        try {
+            if (Get-Command Export-WindowsDriver -ErrorAction SilentlyContinue) {
+                New-Item -ItemType Directory -Path $driverBackupPath -Force | Out-Null
+                Export-WindowsDriver -Online -Destination $driverBackupPath -ErrorAction Stop | Out-Null
+                $driverCount = @(Get-ChildItem -Path $driverBackupPath -Filter "*.inf" -Recurse -ErrorAction SilentlyContinue).Count
+                Write-RunLog "Driver backup: $driverCount driver packages exported to $driverBackupPath" -Level SUCCESS
+                Add-ReportItem -Phase "Safety" -Item "Driver backup" -Status Removed -Detail "$driverCount packages to $driverBackupPath"
+            } else {
+                Write-RunLog "Export-WindowsDriver not available - skipping driver backup" -Level WARN
+            }
+        } catch {
+            Write-RunLog "Driver backup failed (non-fatal): $($_.Exception.Message)" -Level WARN
+        }
+    }
 
     # System Restore checkpoint - one-line safety net before live destructive changes.
     if (-not $DryRun -and -not $SkipRestorePoint) {
