@@ -373,6 +373,44 @@ $Script:OEMTargets = @{
     }
 }
 
+# Load OEM targets from JSON sidecar if present (enables community PRs to update
+# patterns without modifying the engine). Falls back to the embedded defaults above.
+$Script:OEMTargetsJsonPath = $null
+$Script:EngineScriptDir = if ($PSCommandPath) { Split-Path -Parent $PSCommandPath } elseif ($Script:RepoRoot) { $Script:RepoRoot } else { $null }
+if ($Script:EngineScriptDir) {
+    $Script:OEMTargetsJsonPath = Join-Path $Script:EngineScriptDir "oem-targets.json"
+}
+if ($Script:OEMTargetsJsonPath -and (Test-Path -LiteralPath $Script:OEMTargetsJsonPath)) {
+    try {
+        $jsonContent = Get-Content -LiteralPath $Script:OEMTargetsJsonPath -Raw -Encoding UTF8
+        $jsonObj = $jsonContent | ConvertFrom-Json
+        foreach ($oem in ($jsonObj | Get-Member -MemberType NoteProperty).Name) {
+            $def = @{}
+            $oemData = $jsonObj.$oem
+            foreach ($prop in ($oemData | Get-Member -MemberType NoteProperty).Name) {
+                $val = $oemData.$prop
+                if ($prop -eq 'ManualUninstallers' -and $val -is [System.Array]) {
+                    $manuals = @()
+                    foreach ($item in $val) {
+                        $ht = @{}
+                        foreach ($p in ($item | Get-Member -MemberType NoteProperty).Name) { $ht[$p] = $item.$p }
+                        $manuals += $ht
+                    }
+                    $def[$prop] = $manuals
+                } elseif ($val -is [System.Array] -or ($val -is [object[]])) {
+                    $def[$prop] = @($val)
+                } else {
+                    $def[$prop] = $val
+                }
+            }
+            $Script:OEMTargets[$oem] = $def
+        }
+        Write-RunLog "Loaded OEM targets from $Script:OEMTargetsJsonPath" -Level INFO
+    } catch {
+        Write-RunLog "Failed to load OEM targets JSON, using embedded defaults: $($_.Exception.Message)" -Level WARN
+    }
+}
+
 # ============================================================================
 # OEM AUTO-DETECTION
 # ============================================================================
@@ -832,6 +870,85 @@ function Write-RunLog {
 
     # UTF8 log: PS 5.1 default is ANSI which mangles non-ASCII (OEM names can contain em-dashes, etc.)
     Add-Content -Path $LogPath -Value $logEntry -Encoding UTF8 -ErrorAction SilentlyContinue
+}
+
+# ============================================================================
+# PRE-RUN INVENTORY SNAPSHOT
+# ============================================================================
+
+function Export-PreRunInventory {
+    param(
+        [Parameter(Mandatory)][hashtable]$Targets,
+        [Parameter(Mandatory)][string]$OutputPath
+    )
+
+    $inventory = @{
+        Timestamp  = (Get-Date).ToString("o")
+        Computer   = $env:COMPUTERNAME
+        Processes  = @()
+        Services   = @()
+        AppxPackages = @()
+        Win32Apps   = @()
+        Tasks       = @()
+        RegistryKeys = @()
+        FilesystemPaths = @()
+    }
+
+    $allProcs = Get-Process -ErrorAction SilentlyContinue
+    foreach ($pattern in $Targets.ProcessPatterns) {
+        $inventory.Processes += @($allProcs | Where-Object { $_.Name -like $pattern } | ForEach-Object { $_.Name }) | Select-Object -Unique
+    }
+
+    $allSvcs = Get-Service -ErrorAction SilentlyContinue
+    foreach ($pattern in $Targets.ServicePatterns) {
+        $inventory.Services += @($allSvcs | Where-Object { $_.DisplayName -like $pattern -or $_.Name -like $pattern } | ForEach-Object { "$($_.DisplayName) [$($_.Name)]" })
+    }
+
+    foreach ($pattern in $Targets.AppxPatterns) {
+        $inventory.AppxPackages += @(Get-AppxPackage -AllUsers -Name $pattern -ErrorAction SilentlyContinue | ForEach-Object { $_.Name })
+    }
+
+    $uninstallPaths = @(
+        "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*",
+        "HKLM:\SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*",
+        "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*"
+    )
+    foreach ($regPath in $uninstallPaths) {
+        $apps = Get-ItemProperty $regPath -ErrorAction SilentlyContinue | Where-Object {
+            $isOEM = $false
+            foreach ($pattern in $Targets.Win32Patterns) {
+                if ($_.Publisher -like $pattern -or $_.DisplayName -like $pattern) { $isOEM = $true; break }
+            }
+            $isOEM
+        }
+        $inventory.Win32Apps += @($apps | ForEach-Object { $_.DisplayName })
+    }
+
+    $allTasks = Get-ScheduledTask -ErrorAction SilentlyContinue
+    foreach ($pattern in $Targets.TaskPatterns) {
+        $inventory.Tasks += @($allTasks | Where-Object { $_.TaskName -like $pattern -or $_.TaskPath -like $pattern } | ForEach-Object { "$($_.TaskPath)$($_.TaskName)" })
+    }
+
+    foreach ($path in $Targets.RegistryPaths) {
+        if (Test-Path $path) { $inventory.RegistryKeys += $path }
+    }
+
+    foreach ($path in $Targets.FilesystemPaths) {
+        if (Test-Path $path) { $inventory.FilesystemPaths += $path }
+    }
+
+    $inventory.Processes = @($inventory.Processes | Select-Object -Unique)
+    $inventory.Services = @($inventory.Services | Select-Object -Unique)
+    $inventory.AppxPackages = @($inventory.AppxPackages | Select-Object -Unique)
+    $inventory.Win32Apps = @($inventory.Win32Apps | Select-Object -Unique)
+    $inventory.Tasks = @($inventory.Tasks | Select-Object -Unique)
+
+    try {
+        $inventory | ConvertTo-Json -Depth 4 | Out-File -FilePath $OutputPath -Encoding utf8 -Force
+        Write-RunLog "Pre-run inventory saved: $OutputPath" -Level SUCCESS
+    } catch {
+        Write-RunLog "Failed to save inventory: $($_.Exception.Message)" -Level WARN
+    }
 }
 
 function Show-Banner {
@@ -2961,6 +3078,11 @@ function Invoke-NuclearOEMRemover {
     Write-RunLog "Log file: $LogPath" -Level INFO
     Write-RunLog "Target OEMs: $($targetOEMs -join ', ')" -Level INFO
     Write-RunLog "Parameters: DryRun=$DryRun, KeepDCU=$KeepDellCommandUpdate, Force=$Force, SkipReinstallBlock=$SkipReinstallBlock, SkipFilesystemCleanup=$SkipFilesystemCleanup, SkipResidueCleanup=$SkipResidueCleanup, SkipRestorePoint=$SkipRestorePoint" -Level INFO
+
+    # Pre-run inventory — snapshot of detected OEM artifacts before any changes
+    $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
+    $inventoryPath = Join-Path $env:TEMP "NuclearOEMRemover-Inventory-$timestamp.json"
+    Export-PreRunInventory -Targets $mergedTargets -OutputPath $inventoryPath
 
     # System Restore checkpoint - one-line safety net before live destructive changes.
     if (-not $DryRun -and -not $SkipRestorePoint) {
