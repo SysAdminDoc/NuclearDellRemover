@@ -254,21 +254,32 @@ $Script:OEMTargets = @{
         HardwareIdSeeds = @()
     }
     HP = @{
-        ProcessPatterns = @("*HPSupportAssist*", "*HpTouchpointAnalytics*", "*HPWolfSecurity*", "*HPSureClick*", "*HPAudioSwitch*", "*HPCommRecovery*", "*HpSystemEventUtility*", "*HPPrintScan*")
+        ProcessPatterns = @("*HPSupportAssist*", "*HpTouchpointAnalytics*", "*HPWolfSecurity*", "*HPSureClick*", "*HPAudioSwitch*", "*HPCommRecovery*", "*HpSystemEventUtility*", "*HPPrintScan*", "*HPAICompanion*", "*HPConnectionOptimizer*")
         ServicePatterns = @("*HP*", "*HpTouchpointAnalytics*", "*HPAppHelperCap*", "*HPDiagsCap*", "*HPNetworkCap*", "*HPSysInfoCap*")
         ServiceNames    = @(
             "HPSupportSolutionsFrameworkService", "HpTouchpointAnalyticsService",
             "HPAppHelperCap", "HPDiagsCap", "HPNetworkCap", "HPSysInfoCap",
             "HPJumpStartBridge", "HPJumpStartLaunchService",
             "HPPrintScanDoctorService", "HPWolfSecurityService",
-            "HPSureClickSecureService", "HPCommRecovery"
+            "HPSureClickSecureService", "HPCommRecovery",
+            "SecurityUpdateService", "HPConnectionOptimizer"
         )
-        AppxPatterns    = @("*AD2F1837*", "*HPPrinterControl*", "*HPQuickDrop*", "*HPSmart*", "*HPDesktopSupportUtilities*", "*HPSystemInformation*", "*HPPrivacySettings*", "*HPPCHardwareDiagnosticsWindows*", "*HPAccessoryCenter*")
-        Win32Patterns   = @("*HP *", "*HP Wolf*", "*HP Sure*", "*HP Client*", "*HP Documentation*", "*HP Support*", "*Hewlett*")
+        AppxPatterns    = @(
+            "*AD2F1837*", "*HPPrinterControl*", "*HPQuickDrop*", "*HPSmart*",
+            "*HPDesktopSupportUtilities*", "*HPSystemInformation*", "*HPPrivacySettings*",
+            "*HPPCHardwareDiagnosticsWindows*", "*HPAccessoryCenter*",
+            "*HPAIExperienceCenter*", "*HPSureShieldAI*", "*HPWelcome*",
+            "*HPJumpStarts*", "*HPJumpStartBridge*", "*HPConnectedMusic*",
+            "*myHP*", "*HPConnectionOptimizer*", "*HPAICompanion*"
+        )
+        Win32Patterns   = @("*HP *", "*HP Wolf*", "*HP Sure*", "*HP Client*", "*HP Documentation*", "*HP Support*", "*Hewlett*", "*HP AI*", "*HP Connection Optimizer*", "*ExpressVPN*")
         WingetApps      = @(
-            "HP Support Assistant", "HP Wolf Security",
-            "HP Sure Click", "HP Audio Switch", "HP Documentation",
-            "HP Smart", "HP PC Hardware Diagnostics"
+            "HP Support Assistant", "HP Wolf Security", "HP Wolf Security - Console",
+            "HP Sure Click", "HP Sure Click Security Browser",
+            "HP Audio Switch", "HP Documentation",
+            "HP Smart", "HP PC Hardware Diagnostics",
+            "HP Security Update Service", "HP Connection Optimizer",
+            "HP JumpStart", "HP AI Companion", "ExpressVPN"
         )
         TaskPatterns    = @("*HP *", "*Hewlett*", "*HPSupportAssist*", "*HpTouchpoint*")
         TaskFolders     = @("Hewlett-Packard", "HP")
@@ -287,6 +298,13 @@ $Script:OEMTargets = @{
             "C:\swsetup"
         )
         StartMenuPatterns = @("*HP*", "*Hewlett*")
+        ManualUninstallers = @(
+            @{ Name = "HP Support Assistant"; Path = "C:\swsetup\sp*\UninstallHPSA.exe"; Arguments = "/S" },
+            @{ Name = "HP Support Assistant"; Path = "C:\Program Files (x86)\HP\HP Support Framework\UninstallHPSA.exe"; Arguments = "/S" },
+            @{ Name = "HP Wolf Security"; Path = "C:\Program Files\HP\HP Wolf Security\Uninstall.exe"; Arguments = "/S" },
+            @{ Name = "HP Sure Click"; Path = "C:\Program Files\HP\HP Sure Click\Uninstall.exe"; Arguments = "/S" },
+            @{ Name = "HP Sure Click Security Browser"; Path = "C:\Program Files\HP\HP Sure Click Security Browser\Uninstall.exe"; Arguments = "/S" }
+        )
         ProfileRelativePaths = @(
             "AppData\Local\HP",
             "AppData\Local\Hewlett-Packard",
@@ -296,20 +314,28 @@ $Script:OEMTargets = @{
         HardwareIdSeeds = @()
     }
     Lenovo = @{
-        ProcessPatterns = @("*Lenovo*", "*ImController*", "*Vantage*", "*LenovoNow*", "*SystemUpdate*", "*FnKeyDaemon*")
+        ProcessPatterns = @("*Lenovo*", "*ImController*", "*Vantage*", "*LenovoNow*", "*SystemUpdate*", "*FnKeyDaemon*", "*LenovoAI*", "*SmartAppearance*")
         ServicePatterns = @("*Lenovo*", "*ImController*", "*Vantage*")
         ServiceNames    = @(
             "ImControllerService", "LenovoVantageService",
             "Lenovo.Modern.ImController", "Lenovo System Update Service",
             "LenovoFnAndFunctionKeys", "LenovoPowerManager",
-            "LenovoNow", "SUService"
+            "LenovoNow", "SUService",
+            "Lenovo System Interface Foundation Service"
         )
-        AppxPatterns    = @("*Lenovo*", "*LenovoCompanion*", "*LenovoSettings*", "*ImController*", "*E046963F.LenovoSettingsforEnterprise*", "*E0469640.LenovoUtility*")
-        Win32Patterns   = @("*Lenovo*", "*ImController*", "*System Update*")
+        AppxPatterns    = @(
+            "*Lenovo*", "*LenovoCompanion*", "*LenovoSettings*", "*ImController*",
+            "*E046963F.LenovoSettingsforEnterprise*", "*E0469640.LenovoUtility*",
+            "*LenovoSmartAppearance*", "*LenovoAINow*", "*LenovoAIMeetingManager*",
+            "*LenovoWelcome*"
+        )
+        Win32Patterns   = @("*Lenovo*", "*ImController*", "*System Update*", "*Lenovo AI*", "*Smart Appearance*")
         WingetApps      = @(
             "Lenovo Vantage", "Lenovo Commercial Vantage",
             "Lenovo System Update", "Lenovo Now",
-            "Lenovo Pen Settings", "Lenovo Hotkeys"
+            "Lenovo Pen Settings", "Lenovo Hotkeys",
+            "Lenovo AI Now", "Lenovo AI Meeting Manager",
+            "Lenovo Smart Appearance", "Lenovo Welcome"
         )
         TaskPatterns    = @("*Lenovo*", "*ImController*", "*TVT*")
         TaskFolders     = @("Lenovo")
@@ -325,6 +351,11 @@ $Script:OEMTargets = @{
             "C:\swtools"
         )
         StartMenuPatterns = @("*Lenovo*")
+        ManualUninstallers = @(
+            @{ Name = "Lenovo System Interface Foundation"; Path = "C:\Program Files\Lenovo\ImController\Service\Lenovo.Modern.ImController.exe"; Arguments = "--uninstall" },
+            @{ Name = "Lenovo Vantage Service"; Path = "C:\Program Files (x86)\Lenovo\VantageService\*\Uninstall.exe"; Arguments = "/S" },
+            @{ Name = "Lenovo System Update"; Path = "C:\Program Files (x86)\Lenovo\System Update\Uninstall.exe"; Arguments = "/S" }
+        )
         ProfileRelativePaths = @(
             "AppData\Local\Lenovo",
             "AppData\Roaming\Lenovo"
@@ -3530,36 +3561,39 @@ $xaml = @'
               <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
             <TextBlock Text="Cleanup Phases" Style="{StaticResource SectionLabel}"/>
-            <UniformGrid Grid.Row="1" Columns="5" Rows="2" Margin="0,8,0,0">
-              <Border x:Name="PhaseProcesses" CornerRadius="8" Background="#0F1726" BorderBrush="{StaticResource LineSoft}" BorderThickness="1" Padding="10" Margin="0,0,8,8">
-                <TextBlock Text="Processes" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{StaticResource Muted}" FontWeight="SemiBold"/>
+            <UniformGrid Grid.Row="1" Columns="6" Rows="2" Margin="0,8,0,0">
+              <Border x:Name="PhaseProcesses" CornerRadius="8" Background="#0F1726" BorderBrush="{StaticResource LineSoft}" BorderThickness="1" Padding="10" Margin="0,0,6,6">
+                <TextBlock Text="Processes" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{StaticResource Muted}" FontWeight="SemiBold" FontSize="11"/>
               </Border>
-              <Border x:Name="PhaseServices" CornerRadius="8" Background="#0F1726" BorderBrush="{StaticResource LineSoft}" BorderThickness="1" Padding="10" Margin="0,0,8,8">
-                <TextBlock Text="Services" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{StaticResource Muted}" FontWeight="SemiBold"/>
+              <Border x:Name="PhaseServices" CornerRadius="8" Background="#0F1726" BorderBrush="{StaticResource LineSoft}" BorderThickness="1" Padding="10" Margin="0,0,6,6">
+                <TextBlock Text="Services" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{StaticResource Muted}" FontWeight="SemiBold" FontSize="11"/>
               </Border>
-              <Border x:Name="PhaseAppx" CornerRadius="8" Background="#0F1726" BorderBrush="{StaticResource LineSoft}" BorderThickness="1" Padding="10" Margin="0,0,8,8">
-                <TextBlock Text="AppX" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{StaticResource Muted}" FontWeight="SemiBold"/>
+              <Border x:Name="PhaseAppx" CornerRadius="8" Background="#0F1726" BorderBrush="{StaticResource LineSoft}" BorderThickness="1" Padding="10" Margin="0,0,6,6">
+                <TextBlock Text="AppX" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{StaticResource Muted}" FontWeight="SemiBold" FontSize="11"/>
               </Border>
-              <Border x:Name="PhaseWin32" CornerRadius="8" Background="#0F1726" BorderBrush="{StaticResource LineSoft}" BorderThickness="1" Padding="10" Margin="0,0,8,8">
-                <TextBlock Text="Win32" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{StaticResource Muted}" FontWeight="SemiBold"/>
+              <Border x:Name="PhaseWin32" CornerRadius="8" Background="#0F1726" BorderBrush="{StaticResource LineSoft}" BorderThickness="1" Padding="10" Margin="0,0,6,6">
+                <TextBlock Text="Win32" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{StaticResource Muted}" FontWeight="SemiBold" FontSize="11"/>
               </Border>
-              <Border x:Name="PhaseTasks" CornerRadius="8" Background="#0F1726" BorderBrush="{StaticResource LineSoft}" BorderThickness="1" Padding="10" Margin="0,0,0,8">
-                <TextBlock Text="Tasks" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{StaticResource Muted}" FontWeight="SemiBold"/>
+              <Border x:Name="PhaseTasks" CornerRadius="8" Background="#0F1726" BorderBrush="{StaticResource LineSoft}" BorderThickness="1" Padding="10" Margin="0,0,6,6">
+                <TextBlock Text="Tasks" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{StaticResource Muted}" FontWeight="SemiBold" FontSize="11"/>
               </Border>
-              <Border x:Name="PhaseRegistry" CornerRadius="8" Background="#0F1726" BorderBrush="{StaticResource LineSoft}" BorderThickness="1" Padding="10" Margin="0,0,8,0">
-                <TextBlock Text="Registry" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{StaticResource Muted}" FontWeight="SemiBold"/>
+              <Border x:Name="PhaseRegistry" CornerRadius="8" Background="#0F1726" BorderBrush="{StaticResource LineSoft}" BorderThickness="1" Padding="10" Margin="0,0,0,6">
+                <TextBlock Text="Registry" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{StaticResource Muted}" FontWeight="SemiBold" FontSize="11"/>
               </Border>
-              <Border x:Name="PhaseFilesystem" CornerRadius="8" Background="#0F1726" BorderBrush="{StaticResource LineSoft}" BorderThickness="1" Padding="10" Margin="0,0,8,0">
-                <TextBlock Text="Files" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{StaticResource Muted}" FontWeight="SemiBold"/>
+              <Border x:Name="PhaseFilesystem" CornerRadius="8" Background="#0F1726" BorderBrush="{StaticResource LineSoft}" BorderThickness="1" Padding="10" Margin="0,0,6,0">
+                <TextBlock Text="Files" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{StaticResource Muted}" FontWeight="SemiBold" FontSize="11"/>
               </Border>
-              <Border x:Name="PhaseReinstall" CornerRadius="8" Background="#0F1726" BorderBrush="{StaticResource LineSoft}" BorderThickness="1" Padding="10" Margin="0,0,8,0">
-                <TextBlock Text="Reinstall" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{StaticResource Muted}" FontWeight="SemiBold"/>
+              <Border x:Name="PhaseReinstall" CornerRadius="8" Background="#0F1726" BorderBrush="{StaticResource LineSoft}" BorderThickness="1" Padding="10" Margin="0,0,6,0">
+                <TextBlock Text="Reinstall" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{StaticResource Muted}" FontWeight="SemiBold" FontSize="11"/>
               </Border>
-              <Border x:Name="PhaseVerify" CornerRadius="8" Background="#0F1726" BorderBrush="{StaticResource LineSoft}" BorderThickness="1" Padding="10" Margin="0,0,8,0">
-                <TextBlock Text="Verify" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{StaticResource Muted}" FontWeight="SemiBold"/>
+              <Border x:Name="PhaseResidue" CornerRadius="8" Background="#0F1726" BorderBrush="{StaticResource LineSoft}" BorderThickness="1" Padding="10" Margin="0,0,6,0">
+                <TextBlock Text="Residue" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{StaticResource Muted}" FontWeight="SemiBold" FontSize="11"/>
               </Border>
-              <Border x:Name="PhaseReport" CornerRadius="8" Background="#0F1726" BorderBrush="{StaticResource LineSoft}" BorderThickness="1" Padding="10">
-                <TextBlock Text="Report" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{StaticResource Muted}" FontWeight="SemiBold"/>
+              <Border x:Name="PhaseVerify" CornerRadius="8" Background="#0F1726" BorderBrush="{StaticResource LineSoft}" BorderThickness="1" Padding="10" Margin="0,0,6,0">
+                <TextBlock Text="Verify" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{StaticResource Muted}" FontWeight="SemiBold" FontSize="11"/>
+              </Border>
+              <Border x:Name="PhaseReport" CornerRadius="8" Background="#0F1726" BorderBrush="{StaticResource LineSoft}" BorderThickness="1" Padding="10" Margin="0,0,0,0">
+                <TextBlock Text="Report" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{StaticResource Muted}" FontWeight="SemiBold" FontSize="11"/>
               </Border>
             </UniformGrid>
           </Grid>
@@ -3604,7 +3638,7 @@ $controlNames = @(
     "StartButton", "StopButton", "OpenReportButton", "OpenLogButton", "StatusTitle", "StatusBody",
     "RunProgress", "ProgressLabel", "LogBox", "ReportPathText", "FooterStatus",
     "PhaseProcesses", "PhaseServices", "PhaseAppx", "PhaseWin32", "PhaseTasks",
-    "PhaseRegistry", "PhaseFilesystem", "PhaseReinstall", "PhaseVerify", "PhaseReport"
+    "PhaseRegistry", "PhaseFilesystem", "PhaseReinstall", "PhaseResidue", "PhaseVerify", "PhaseReport"
 )
 
 $ui = @{}
@@ -3644,6 +3678,7 @@ $Script:PhaseControls = @(
     $ui.PhaseRegistry,
     $ui.PhaseFilesystem,
     $ui.PhaseReinstall,
+    $ui.PhaseResidue,
     $ui.PhaseVerify,
     $ui.PhaseReport
 )
@@ -3892,9 +3927,9 @@ function Update-RunStateFromLine {
     if ($Line -match "PHASE 6:") { Set-PhaseIndex 6; return }
     if ($Line -match "PHASE 7:") { Set-PhaseIndex 7; return }
     if ($Line -match "PHASE 8:") { Set-PhaseIndex 8; return }
-    if ($Line -match "PHASE 9:") { Set-PhaseIndex 8; return }  # Residue maps to Reinstall tile
-    if ($Line -match "VERIFICATION:") { Set-PhaseIndex 9; return }
-    if ($Line -match "HTML report saved to:") { Set-PhaseIndex 10; return }
+    if ($Line -match "PHASE 9:") { Set-PhaseIndex 9; return }
+    if ($Line -match "VERIFICATION:") { Set-PhaseIndex 10; return }
+    if ($Line -match "HTML report saved to:") { Set-PhaseIndex 11; return }
 }
 
 function Set-RunningState {

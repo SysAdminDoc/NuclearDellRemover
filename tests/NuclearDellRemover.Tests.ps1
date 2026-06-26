@@ -288,6 +288,13 @@ Describe "OEM target definitions" {
         }
     }
 
+    It "ships ManualUninstallers for Dell, HP, and Lenovo" {
+        foreach ($oem in @('Dell','HP','Lenovo')) {
+            $Script:OEMTargets[$oem].ContainsKey('ManualUninstallers') | Should -BeTrue
+            @($Script:OEMTargets[$oem].ManualUninstallers).Count | Should -BeGreaterThan 0
+        }
+    }
+
     It "ships Dell KeepOnPreserve patterns" {
         $Script:OEMTargets.Dell.KeepOnPreserve | Should -Not -BeNullOrEmpty
     }
