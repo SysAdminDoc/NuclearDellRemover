@@ -41,6 +41,10 @@ param(
     # audited the Package Cache manually and trust its contents.
     [switch]$SkipSignatureVerification,
 
+    # Public: skip McAfee/Norton bundled security suite removal. By default these OEM-bundled
+    # trials are included in the cleanup. Pass this to leave them untouched.
+    [switch]$SkipSecuritySuites,
+
     [Parameter(DontShow = $true)]
     [switch]$InternalEngine,
     [Parameter(DontShow = $true)]
@@ -98,6 +102,7 @@ if (-not $LoadOnly -and -not (Test-EngineIsAdministrator)) {
         if ($SkipFilesystemCleanup)      { $relaunchArgs += "-SkipFilesystemCleanup" }
         if ($SkipResidueCleanup)         { $relaunchArgs += "-SkipResidueCleanup" }
         if ($SkipSignatureVerification)  { $relaunchArgs += "-SkipSignatureVerification" }
+        if ($SkipSecuritySuites)         { $relaunchArgs += "-SkipSecuritySuites" }
         if ($OEM)                        { $relaunchArgs += @("-OEM", $OEM) }
         if ($HardwareIdSeedsFile)        { $relaunchArgs += @("-HardwareIdSeedsFile", (& $quote $HardwareIdSeedsFile)) }
         if ($PSBoundParameters.ContainsKey('LogPath'))          { $relaunchArgs += @("-LogPath",          (& $quote $LogPath)) }
@@ -412,6 +417,54 @@ if ($Script:OEMTargetsJsonPath -and (Test-Path -LiteralPath $Script:OEMTargetsJs
 }
 
 # ============================================================================
+# BUNDLED SECURITY SUITE TARGETS (McAfee / Norton)
+# ============================================================================
+# OEM-bundled security trials that are cross-vendor. Merged into the cleanup
+# targets unless -SkipSecuritySuites is set.
+
+$Script:SecuritySuiteTargets = @{
+    ProcessPatterns = @("*McAfee*", "*mcshield*", "*mfemms*", "*mfevtps*", "*MMSSHOST*", "*Norton*", "*NortonSecurity*", "*nsWscSvc*")
+    ServicePatterns = @("*McAfee*", "*Norton*")
+    ServiceNames    = @(
+        "McAfee SiteAdvisor Service", "McAWFwk", "mccspsvc", "McMPFSvc",
+        "McNaiAnn", "mcpltsvc", "McProxy", "mcsysmon", "mfefire",
+        "mfemms", "mfevtp", "MSK80Service", "McAPExe", "HomeNetSvc",
+        "Norton Security", "Norton AntiVirus", "NortonLifeLock Update"
+    )
+    AppxPatterns    = @("*McAfee*", "*Norton*")
+    Win32Patterns   = @("*McAfee*", "*Norton*", "*LiveSafe*", "*WebAdvisor*")
+    WingetApps      = @(
+        "McAfee LiveSafe", "McAfee Total Protection", "McAfee AntiVirus Plus",
+        "McAfee Internet Security", "McAfee WebAdvisor", "McAfee Personal Security",
+        "Norton 360", "Norton Security", "Norton AntiVirus", "Norton Internet Security"
+    )
+    TaskPatterns    = @("*McAfee*", "*Norton*")
+    RegistryPaths   = @(
+        "HKLM:\SOFTWARE\McAfee", "HKLM:\SOFTWARE\Wow6432Node\McAfee",
+        "HKCU:\SOFTWARE\McAfee",
+        "HKLM:\SOFTWARE\Norton", "HKLM:\SOFTWARE\Wow6432Node\Norton",
+        "HKLM:\SOFTWARE\Symantec", "HKLM:\SOFTWARE\Wow6432Node\Symantec",
+        "HKCU:\SOFTWARE\Norton", "HKCU:\SOFTWARE\Symantec"
+    )
+    RunKeyPatterns  = @("*McAfee*", "*Norton*")
+    FilesystemPaths = @(
+        "$env:ProgramData\McAfee", "C:\Program Files\McAfee", "C:\Program Files (x86)\McAfee",
+        "C:\Program Files\McAfee.com", "C:\Program Files (x86)\McAfee.com",
+        "C:\Program Files\Common Files\McAfee", "C:\Program Files (x86)\Common Files\McAfee",
+        "$env:ProgramData\Norton", "C:\Program Files\Norton Security",
+        "C:\Program Files (x86)\Norton Security", "C:\Program Files\NortonInstaller",
+        "C:\Program Files (x86)\NortonInstaller"
+    )
+    StartMenuPatterns = @("*McAfee*", "*Norton*")
+    ProfileRelativePaths = @(
+        "AppData\Local\McAfee",
+        "AppData\Roaming\McAfee",
+        "AppData\Local\Norton",
+        "AppData\Roaming\Norton"
+    )
+}
+
+# ============================================================================
 # OEM AUTO-DETECTION
 # ============================================================================
 
@@ -460,7 +513,10 @@ function Get-TargetOEMs {
 # Merge patterns from all targeted OEMs into a single config.
 # Uses defensive ContainsKey lookups so partial OEM definitions don't silently drop data.
 function Build-MergedConfig {
-    param([string[]]$TargetOEMs)
+    param(
+        [string[]]$TargetOEMs,
+        [AllowNull()][object]$IncludeSecuritySuites = (-not $SkipSecuritySuites)
+    )
 
     $arrayKeys = @(
         "ProcessPatterns", "ServicePatterns", "ServiceNames", "AppxPatterns",
@@ -508,6 +564,19 @@ function Build-MergedConfig {
         }
 
         $merged.ManualUninstallers = @($dedupedManualUninstallers)
+    }
+
+    if ([bool]$IncludeSecuritySuites -and $Script:SecuritySuiteTargets) {
+        foreach ($k in $arrayKeys) {
+            if ($Script:SecuritySuiteTargets.ContainsKey($k)) {
+                $merged[$k] += $Script:SecuritySuiteTargets[$k]
+            }
+        }
+        foreach ($key in $arrayKeys) {
+            $merged[$key] = @($merged[$key] |
+                Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } |
+                Select-Object -Unique)
+        }
     }
 
     return $merged
@@ -3077,7 +3146,7 @@ function Invoke-NuclearOEMRemover {
     Write-RunLog "NuclearOEMRemover v$($Script:Config.Version) starting..." -Level INFO
     Write-RunLog "Log file: $LogPath" -Level INFO
     Write-RunLog "Target OEMs: $($targetOEMs -join ', ')" -Level INFO
-    Write-RunLog "Parameters: DryRun=$DryRun, KeepDCU=$KeepDellCommandUpdate, Force=$Force, SkipReinstallBlock=$SkipReinstallBlock, SkipFilesystemCleanup=$SkipFilesystemCleanup, SkipResidueCleanup=$SkipResidueCleanup, SkipRestorePoint=$SkipRestorePoint" -Level INFO
+    Write-RunLog "Parameters: DryRun=$DryRun, KeepDCU=$KeepDellCommandUpdate, Force=$Force, SkipReinstallBlock=$SkipReinstallBlock, SkipFilesystemCleanup=$SkipFilesystemCleanup, SkipResidueCleanup=$SkipResidueCleanup, SkipSecuritySuites=$SkipSecuritySuites, SkipRestorePoint=$SkipRestorePoint" -Level INFO
 
     # Pre-run inventory — snapshot of detected OEM artifacts before any changes
     $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
@@ -3652,6 +3721,9 @@ $xaml = @'
             <CheckBox x:Name="ForceCheck" Style="{StaticResource PolishedCheck}" Content="Force (bypass SupportAssist version gate)"/>
             <TextBlock Text="Removes SupportAssist even if a recent version." Foreground="{StaticResource Faint}" FontSize="12" Margin="24,-6,0,10"/>
 
+            <CheckBox x:Name="SecuritySuitesCheck" Style="{StaticResource PolishedCheck}" IsChecked="True" Content="Remove McAfee / Norton trials"/>
+            <TextBlock Text="OEM-bundled security suites (LiveSafe, Norton 360)." Foreground="{StaticResource Faint}" FontSize="12" Margin="24,-6,0,10"/>
+
             <CheckBox x:Name="RestorePointCheck" Style="{StaticResource PolishedCheck}" IsChecked="True" Content="Create restore point before live run"/>
             <TextBlock Text="Safety net. Skipped in dry-run mode." Foreground="{StaticResource Faint}" FontSize="12" Margin="24,-6,0,10"/>
 
@@ -3789,7 +3861,7 @@ if (Test-Path $Script:IconPath) {
 $controlNames = @(
     "BrandImage", "HeaderStatus", "AutoRadio", "DellRadio", "HPRadio", "LenovoRadio", "AllRadio",
     "DryRunCheck", "BlockReinstallCheck", "FilesystemCheck", "ResidueCheck",
-    "KeepDCUCheck", "ForceCheck", "RestorePointCheck", "OpenReportCheck", "RunSummary",
+    "KeepDCUCheck", "ForceCheck", "SecuritySuitesCheck", "RestorePointCheck", "OpenReportCheck", "RunSummary",
     "StartButton", "StopButton", "OpenReportButton", "OpenLogButton", "StatusTitle", "StatusBody",
     "RunProgress", "ProgressLabel", "LogBox", "ReportPathText", "FooterStatus",
     "PhaseProcesses", "PhaseServices", "PhaseAppx", "PhaseWin32", "PhaseTasks",
@@ -4012,6 +4084,7 @@ function Get-RunArguments {
     if (-not (Get-CheckState $ui.ResidueCheck        -Default $true)) { $argumentList.Add("-SkipResidueCleanup") }
     if (Get-CheckState $ui.KeepDCUCheck)               { $argumentList.Add("-KeepDellCommandUpdate") }
     if (Get-CheckState $ui.ForceCheck)                 { $argumentList.Add("-Force") }
+    if (-not (Get-CheckState $ui.SecuritySuitesCheck -Default $true)) { $argumentList.Add("-SkipSecuritySuites") }
     if (-not (Get-CheckState $ui.RestorePointCheck   -Default $true)) { $argumentList.Add("-SkipRestorePoint") }
 
     $argumentList.Add("-LogPath")
@@ -4034,6 +4107,7 @@ function Format-RunSummary {
     $residue    = if (Get-CheckState $ui.ResidueCheck        -Default $true) { "On" }              else { "Off" }
     $keepDcu    = if (Get-CheckState $ui.KeepDCUCheck)                       { "Keep DCU" }        else { "Remove DCU" }
     $force      = if (Get-CheckState $ui.ForceCheck)                         { "Force on" }        else { "Gated" }
+    $secSuites  = if (Get-CheckState $ui.SecuritySuitesCheck -Default $true) { "McAfee/Norton on" } else { "Skip security suites" }
     $restore    = if (Get-CheckState $ui.RestorePointCheck   -Default $true) { "Restore-point on" } else { "No restore point" }
 
     $parts = @(
@@ -4043,6 +4117,7 @@ function Format-RunSummary {
         "Filesystem: $filesystem",
         "Residue: $residue",
         $keepDcu,
+        $secSuites,
         $force,
         $restore
     )
@@ -4099,7 +4174,7 @@ function Set-RunningState {
     foreach ($control in @(
         $ui.AutoRadio, $ui.DellRadio, $ui.HPRadio, $ui.LenovoRadio, $ui.AllRadio,
         $ui.DryRunCheck, $ui.BlockReinstallCheck, $ui.FilesystemCheck, $ui.ResidueCheck,
-        $ui.KeepDCUCheck, $ui.ForceCheck, $ui.RestorePointCheck, $ui.OpenReportCheck
+        $ui.KeepDCUCheck, $ui.ForceCheck, $ui.SecuritySuitesCheck, $ui.RestorePointCheck, $ui.OpenReportCheck
     )) {
         $control.IsEnabled = -not $Running
     }
@@ -4293,7 +4368,7 @@ function Open-Log {
 foreach ($control in @(
     $ui.AutoRadio, $ui.DellRadio, $ui.HPRadio, $ui.LenovoRadio, $ui.AllRadio,
     $ui.DryRunCheck, $ui.BlockReinstallCheck, $ui.FilesystemCheck, $ui.ResidueCheck,
-    $ui.KeepDCUCheck, $ui.ForceCheck, $ui.RestorePointCheck
+    $ui.KeepDCUCheck, $ui.ForceCheck, $ui.SecuritySuitesCheck, $ui.RestorePointCheck
 )) {
     $control.Add_Click({ Update-RunSummary })
 }

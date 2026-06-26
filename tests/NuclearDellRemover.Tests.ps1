@@ -30,7 +30,7 @@ BeforeAll {
 
 Describe "Build-MergedConfig" {
     It "returns empty-but-well-formed config when given no OEMs" {
-        $merged = Build-MergedConfig -TargetOEMs @()
+        $merged = Build-MergedConfig -TargetOEMs @() -IncludeSecuritySuites $false
         # Use unary-comma to wrap arrays for pipe-into-Should so empty arrays are not unrolled to $null
         ,$merged.ProcessPatterns      | Should -BeOfType [array]
         ,$merged.KeepOnPreserve       | Should -BeOfType [array]
