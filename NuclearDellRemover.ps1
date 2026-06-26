@@ -50,6 +50,13 @@ param(
     # Inverse of the default blacklist approach — useful for fresh-install fleets.
     [string]$WhitelistFile,
 
+    # Public: path to a previous inventory JSON (from a successful run). Compares current OEM
+    # artifacts against the saved baseline and reports what came back. No cleanup is performed.
+    [string]$AuditDrift,
+
+    # Public: directory to write Intune detection + remediation script pair after a run.
+    [string]$ExportIntuneScripts,
+
     [Parameter(DontShow = $true)]
     [switch]$InternalEngine,
     [Parameter(DontShow = $true)]
@@ -1061,6 +1068,120 @@ function Export-PreRunInventory {
     } catch {
         Write-RunLog "Failed to save inventory: $($_.Exception.Message)" -Level WARN
     }
+}
+
+# ============================================================================
+# DRIFT DETECTION
+# ============================================================================
+
+function Test-OEMDrift {
+    param(
+        [Parameter(Mandatory)][string]$BaselinePath,
+        [Parameter(Mandatory)][hashtable]$Targets
+    )
+
+    if (-not (Test-Path -LiteralPath $BaselinePath)) {
+        Write-RunLog "Drift baseline not found: $BaselinePath" -Level ERROR
+        return
+    }
+
+    try {
+        $baseline = Get-Content -LiteralPath $BaselinePath -Raw -Encoding UTF8 | ConvertFrom-Json
+    } catch {
+        Write-RunLog "Failed to parse baseline JSON: $($_.Exception.Message)" -Level ERROR
+        return
+    }
+
+    Write-RunLog -Message "DRIFT AUDIT: Comparing current state against $BaselinePath" -Level PHASE
+    Write-RunLog "Baseline captured: $($baseline.Timestamp) on $($baseline.Computer)" -Level INFO
+
+    $currentInventoryPath = Join-Path $env:TEMP "NuclearOEMRemover-DriftCurrent-$(Get-Date -Format 'yyyyMMdd-HHmmss').json"
+    Export-PreRunInventory -Targets $Targets -OutputPath $currentInventoryPath
+
+    $current = Get-Content -LiteralPath $currentInventoryPath -Raw -Encoding UTF8 | ConvertFrom-Json
+
+    $driftFound = $false
+    $categories = @('Processes', 'Services', 'AppxPackages', 'Win32Apps', 'Tasks', 'RegistryKeys', 'FilesystemPaths')
+
+    foreach ($cat in $categories) {
+        $baselineItems = @($baseline.$cat)
+        $currentItems = @($current.$cat)
+        $returned = @($currentItems | Where-Object { $baselineItems -notcontains $_ })
+        if ($returned.Count -gt 0) {
+            $driftFound = $true
+            Write-RunLog "DRIFT [$cat]: $($returned.Count) new items detected" -Level WARN
+            foreach ($item in $returned) {
+                Write-RunLog "  + $item" -Level WARN
+                Add-ReportItem -Phase "Drift" -Item "$cat`: $item" -Status Failed -Detail "Returned since baseline"
+            }
+        } else {
+            Write-RunLog "[$cat]: clean" -Level SUCCESS
+        }
+    }
+
+    if ($driftFound) {
+        Write-RunLog "DRIFT DETECTED - OEM artifacts have returned since baseline" -Level WARN
+    } else {
+        Write-RunLog "NO DRIFT - system matches baseline" -Level SUCCESS
+    }
+
+    return (-not $driftFound)
+}
+
+# ============================================================================
+# INTUNE DETECTION/REMEDIATION EXPORT
+# ============================================================================
+
+function Export-IntuneScriptPair {
+    param(
+        [Parameter(Mandatory)][string]$OutputDir,
+        [Parameter(Mandatory)][hashtable]$Targets
+    )
+
+    if (-not (Test-Path -LiteralPath $OutputDir)) {
+        New-Item -ItemType Directory -Path $OutputDir -Force | Out-Null
+    }
+
+    $appPatterns = ($Targets.Win32Patterns | ForEach-Object { "`"$_`"" }) -join ', '
+    $appxPatterns = ($Targets.AppxPatterns | ForEach-Object { "`"$_`"" }) -join ', '
+
+    $detectionScript = @"
+# NuclearOEMRemover Intune Detection Script
+# Exits 0 + STDOUT if OEM bloatware is detected (app is "installed" = needs remediation)
+# Exits 0 with no STDOUT if clean (app is "not installed")
+`$patterns = @($appPatterns)
+`$appxPatterns = @($appxPatterns)
+`$found = @()
+foreach (`$p in `$patterns) {
+    `$apps = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*","HKLM:\SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*" -ErrorAction SilentlyContinue |
+        Where-Object { `$_.DisplayName -like `$p }
+    if (`$apps) { `$found += `$apps.DisplayName }
+}
+foreach (`$p in `$appxPatterns) {
+    `$pkgs = Get-AppxPackage -AllUsers -Name `$p -ErrorAction SilentlyContinue
+    if (`$pkgs) { `$found += `$pkgs.Name }
+}
+if (`$found.Count -gt 0) {
+    Write-Output "OEM bloatware detected: `$(`$found -join ', ')"
+    exit 0
+}
+exit 0
+"@
+
+    $remediationScript = @"
+# NuclearOEMRemover Intune Remediation Script
+# Downloads and runs NuclearOEMRemover in unattended mode
+powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "& { irm https://raw.githubusercontent.com/SysAdminDoc/NuclearDellRemover/main/NuclearDellRemover.ps1 -OutFile `$env:TEMP\NuclearOEMRemover.ps1; & `$env:TEMP\NuclearOEMRemover.ps1 -Unattended -SkipRestorePoint }"
+"@
+
+    $detectionPath = Join-Path $OutputDir "Detect-OEMBloatware.ps1"
+    $remediationPath = Join-Path $OutputDir "Remediate-OEMBloatware.ps1"
+
+    $detectionScript | Out-File -FilePath $detectionPath -Encoding utf8 -Force
+    $remediationScript | Out-File -FilePath $remediationPath -Encoding utf8 -Force
+
+    Write-RunLog "Intune detection script: $detectionPath" -Level SUCCESS
+    Write-RunLog "Intune remediation script: $remediationPath" -Level SUCCESS
 }
 
 function Show-Banner {
@@ -3203,6 +3324,13 @@ function Invoke-NuclearOEMRemover {
     Initialize-Whitelist -Path $WhitelistFile
     Show-RunOverview -TargetOEMs $targetOEMs -IsDryRun ([bool]$DryRun)
 
+    if ($AuditDrift) {
+        Write-RunLog "NuclearOEMRemover v$($Script:Config.Version) drift audit mode" -Level INFO
+        $clean = Test-OEMDrift -BaselinePath $AuditDrift -Targets $mergedTargets
+        $exitCode = if ($clean) { 0 } else { 2 }
+        return [PSCustomObject]@{ Results = @{}; ExitCode = $exitCode }
+    }
+
     Write-RunLog "NuclearOEMRemover v$($Script:Config.Version) starting..." -Level INFO
     Write-RunLog "Log file: $LogPath" -Level INFO
     Write-RunLog "Target OEMs: $($targetOEMs -join ', ')" -Level INFO
@@ -3392,6 +3520,10 @@ function Invoke-NuclearOEMRemover {
         Write-Host "  Undo Manifest: $UndoManifestPath" -ForegroundColor Cyan
     }
     Write-Host ""
+
+    if ($ExportIntuneScripts) {
+        Export-IntuneScriptPair -OutputDir $ExportIntuneScripts -Targets $mergedTargets
+    }
 
     # Open report in default browser
     if (-not $NoOpenReport) {
