@@ -1259,6 +1259,11 @@ function Stop-OEMProcesses {
     foreach ($pattern in $Targets.ProcessPatterns) {
         $matchedProcesses = $processes | Where-Object { $_.Name -like $pattern -or $_.ProcessName -like $pattern }
         foreach ($proc in $matchedProcesses) {
+            if (Test-IsWhitelisted -Name $proc.Name) {
+                Write-RunLog "Preserving (whitelist): process $($proc.Name) (PID: $($proc.Id))" -Level INFO
+                Add-ReportItem -Phase "Processes" -Item "$($proc.Name) (PID: $($proc.Id))" -Status Skipped -Detail "Preserved by whitelist"
+                continue
+            }
             if (-not $DryRun) {
                 try {
                     $proc | Stop-Process -Force -ErrorAction Stop
@@ -1797,6 +1802,11 @@ function Remove-OEMScheduledTasks {
     }
 
     foreach ($task in $oemTasks) {
+        if (Test-IsWhitelisted -Name $task.TaskName) {
+            Write-RunLog "Preserving (whitelist): task $($task.TaskPath)$($task.TaskName)" -Level INFO
+            Add-ReportItem -Phase "Tasks" -Item "$($task.TaskPath)$($task.TaskName)" -Status Skipped -Detail "Preserved by whitelist"
+            continue
+        }
         if (-not $DryRun) {
             try {
                 Write-RunLog "Removing task: $($task.TaskPath)$($task.TaskName)" -Level INFO

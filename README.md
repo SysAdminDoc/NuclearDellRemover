@@ -26,10 +26,11 @@ Start with the default dry run for a no-change audit and HTML report, then run l
 
 | Phase | Coverage |
 | --- | --- |
-| Processes | Stops active OEM agents and catches respawns in a second pass |
+| Processes | Stops active OEM agents and catches respawns in a three-pass sweep |
 | Services | Stops, disables, and deletes OEM services |
 | AppX Packages | Removes installed and provisioned Store packages |
-| Win32 Apps | ARP uninstallers + MSI + InstallShield + winget + dynamic Package Cache walk + manual fallbacks, with post-uninstall polling and a SupportAssist version gate |
+| Win32 Apps | ARP uninstallers + MSI + InstallShield + winget + dynamic Package Cache walk + manual fallbacks, with post-uninstall polling |
+| Security Suites | McAfee LiveSafe/Total Protection/WebAdvisor and Norton 360/Security bundled trials (skippable with `-SkipSecuritySuites`) |
 | Scheduled Tasks | Removes OEM tasks and task folders |
 | Registry | Removes OEM keys and startup entries |
 | Filesystem | Removes program data, profile, Start Menu, and install remnants; sweeps Public/current-user desktop `.lnk` shortcuts |
@@ -63,11 +64,20 @@ The interface defaults to dry run, self-elevates if needed, streams live output,
 # Live cleanup, keep Dell Command Update for BIOS/driver management
 .\NuclearDellRemover.ps1 -Unattended -KeepDellCommandUpdate
 
-# Force removal of SupportAssist even at or above the version gate
-.\NuclearDellRemover.ps1 -Unattended -Force
+# Skip McAfee/Norton removal (keep bundled security suite)
+.\NuclearDellRemover.ps1 -Unattended -SkipSecuritySuites
+
+# Preserve specific apps during cleanup (one pattern per line, # for comments)
+.\NuclearDellRemover.ps1 -Unattended -WhitelistFile C:\Fleet\keep-these.txt
 
 # Seed the hardware-ID deny list with extras collected from a fleet-wide audit
 .\NuclearDellRemover.ps1 -Unattended -HardwareIdSeedsFile C:\Fleet\alienware-hwids.txt
+
+# Drift audit — compare current state against a previous run's inventory
+.\NuclearDellRemover.ps1 -Unattended -AuditDrift C:\Baselines\post-cleanup.json
+
+# Export Intune detection + remediation script pair
+.\NuclearDellRemover.ps1 -Unattended -DryRun -ExportIntuneScripts C:\IntuneScripts
 ```
 
 `-Unattended` runs the engine headless and auto-elevates. Exit codes: `0` = clean (or dry-run complete), `2` = verification found remnants (restart may clear), `3` = exception during phase execution.
@@ -104,7 +114,7 @@ Install-Module Pester -MinimumVersion 5.0.0 -Scope CurrentUser
 Invoke-Pester -Path .\tests\NuclearDellRemover.Tests.ps1 -Output Detailed
 ```
 
-44 tests, no admin rights required, no system changes. Tests dot-source the main script in `-LoadOnly` mode. CI runs the suite on every push / PR via [GitHub Actions](.github/workflows/test.yml).
+48 tests, no admin rights required, no system changes. Tests dot-source the main script in `-LoadOnly` mode. CI runs the suite on every push / PR via [GitHub Actions](.github/workflows/test.yml).
 
 ### Further reading
 
@@ -121,7 +131,8 @@ Invoke-Pester -Path .\tests\NuclearDellRemover.Tests.ps1 -Output Detailed
 | Clean Filesystem | Removes OEM directories across all user profiles (including the Default template), Start Menu entries, install leftovers, and desktop shortcuts. |
 | Clear Residue | Drops OEM driver packages (`pnputil`), firewall rules, Defender exclusions, and pending BITS transfers. |
 | Keep Dell Command Update | Preserves DCU for BIOS/driver management and applies silent-mode lockdown keys so it stops popping up. |
-| Force | Bypasses the SupportAssist version gate (ignored unless SupportAssist is at or above the gate). |
+| Remove McAfee / Norton | Removes bundled McAfee and Norton security suite trials. Enabled by default. Uncheck to preserve. |
+| Force | Reserved for future use. |
 | Create Restore Point | Creates a System Restore checkpoint before live runs. Ignored in dry-run mode. |
 | Open Report | Opens the generated HTML report when the run finishes. |
 | Start Dry Run / Start Live Cleanup | Runs the selected cleanup profile with the current options. |
