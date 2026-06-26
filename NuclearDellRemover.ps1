@@ -136,6 +136,11 @@ if (-not $LoadOnly -and -not (Test-EngineIsAdministrator)) {
     exit 1
 }
 
+# Deprecation warning for -Force (version gate removed in v1.5.1)
+if ($Force) {
+    Write-Warning "-Force is deprecated and has no effect. The SupportAssist version gate was removed in v1.5.1 (Dell KB000464214). This parameter will be removed in a future major version."
+}
+
 # ============================================================================
 # CONFIGURATION
 # ============================================================================
@@ -3347,11 +3352,19 @@ function Invoke-NuclearOEMRemover {
         $driverBackupPath = Join-Path $env:TEMP "NuclearOEMRemover-DriverBackup-$timestamp"
         try {
             if (Get-Command Export-WindowsDriver -ErrorAction SilentlyContinue) {
-                New-Item -ItemType Directory -Path $driverBackupPath -Force | Out-Null
-                Export-WindowsDriver -Online -Destination $driverBackupPath -ErrorAction Stop | Out-Null
-                $driverCount = @(Get-ChildItem -Path $driverBackupPath -Filter "*.inf" -Recurse -ErrorAction SilentlyContinue).Count
-                Write-RunLog "Driver backup: $driverCount driver packages exported to $driverBackupPath" -Level SUCCESS
-                Add-ReportItem -Phase "Safety" -Item "Driver backup" -Status Removed -Detail "$driverCount packages to $driverBackupPath"
+                $tempDrive = (Get-Item $env:TEMP).PSDrive.Name + ":"
+                $freeBytes = (Get-PSDrive $tempDrive.TrimEnd(':') -ErrorAction SilentlyContinue).Free
+                if ($freeBytes -and $freeBytes -lt 1GB) {
+                    Write-RunLog "Low disk on $tempDrive ($([math]::Round($freeBytes / 1MB))MB free) - skipping driver backup to avoid filling disk" -Level WARN
+                } else {
+                    New-Item -ItemType Directory -Path $driverBackupPath -Force | Out-Null
+                    Export-WindowsDriver -Online -Destination $driverBackupPath -ErrorAction Stop | Out-Null
+                    $backupFiles = Get-ChildItem -Path $driverBackupPath -Recurse -File -ErrorAction SilentlyContinue
+                    $driverCount = @($backupFiles | Where-Object { $_.Extension -eq '.inf' }).Count
+                    $totalSizeMB = [math]::Round(($backupFiles | Measure-Object -Property Length -Sum).Sum / 1MB, 1)
+                    Write-RunLog "Driver backup: $driverCount driver packages ($($totalSizeMB)MB) exported to $driverBackupPath" -Level SUCCESS
+                    Add-ReportItem -Phase "Safety" -Item "Driver backup" -Status Removed -Detail "$driverCount packages ($($totalSizeMB)MB) to $driverBackupPath"
+                }
             } else {
                 Write-RunLog "Export-WindowsDriver not available - skipping driver backup" -Level WARN
             }
