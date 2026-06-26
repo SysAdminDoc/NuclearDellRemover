@@ -103,33 +103,20 @@ Describe "Test-ShouldPreserveApp" {
 }
 
 Describe "Test-ShouldSkipSupportAssistByVersion" {
-    It "skips SupportAssist at or above the gate" {
-        $app = [PSCustomObject]@{ DisplayName = 'Dell SupportAssist'; DisplayVersion = '3.14.0.0' }
-        Test-ShouldSkipSupportAssistByVersion -App $app -ForceFlag $false | Should -BeTrue
-    }
-
-    It "does not skip SupportAssist below the gate" {
-        $app = [PSCustomObject]@{ DisplayName = 'Dell SupportAssist'; DisplayVersion = '3.0.0.0' }
+    # Version gate removed in v1.5.1 — SA Remediation v5.5.16.0 caused BSOD loops.
+    # Function now always returns $false (never skip removal).
+    It "never skips SupportAssist regardless of version (gate removed)" {
+        $app = [PSCustomObject]@{ DisplayName = 'Dell SupportAssist'; DisplayVersion = '5.5.16.0' }
         Test-ShouldSkipSupportAssistByVersion -App $app -ForceFlag $false | Should -BeFalse
     }
 
-    It "does not skip non-SupportAssist apps" {
+    It "never skips even with high version numbers" {
+        $app = [PSCustomObject]@{ DisplayName = 'Dell SupportAssist'; DisplayVersion = '99.0.0.0' }
+        Test-ShouldSkipSupportAssistByVersion -App $app -ForceFlag $false | Should -BeFalse
+    }
+
+    It "returns false for non-SupportAssist apps" {
         $app = [PSCustomObject]@{ DisplayName = 'Dell Optimizer'; DisplayVersion = '9.99.99.99' }
-        Test-ShouldSkipSupportAssistByVersion -App $app -ForceFlag $false | Should -BeFalse
-    }
-
-    It "honors Force=true by returning false even above the gate" {
-        $app = [PSCustomObject]@{ DisplayName = 'Dell SupportAssist'; DisplayVersion = '9.9.9.9' }
-        Test-ShouldSkipSupportAssistByVersion -App $app -ForceFlag $true | Should -BeFalse
-    }
-
-    It "returns false when DisplayVersion is missing" {
-        $app = [PSCustomObject]@{ DisplayName = 'Dell SupportAssist'; DisplayVersion = $null }
-        Test-ShouldSkipSupportAssistByVersion -App $app -ForceFlag $false | Should -BeFalse
-    }
-
-    It "returns false when DisplayVersion is malformed" {
-        $app = [PSCustomObject]@{ DisplayName = 'Dell SupportAssist'; DisplayVersion = 'not-a-version' }
         Test-ShouldSkipSupportAssistByVersion -App $app -ForceFlag $false | Should -BeFalse
     }
 }
@@ -304,9 +291,8 @@ Describe "OEM target definitions" {
         $Script:Config.TrustedInstallerSigners | Should -Contain 'Microsoft Corporation'
     }
 
-    It "has SupportAssist version gate configured" {
-        $Script:Config.SupportAssistMinVersion | Should -Not -BeNullOrEmpty
-        { [Version]$Script:Config.SupportAssistMinVersion } | Should -Not -Throw
+    It "has SupportAssist version gate removed (BSOD safety)" {
+        $Script:Config.ContainsKey('SupportAssistMinVersion') | Should -BeFalse
     }
 }
 

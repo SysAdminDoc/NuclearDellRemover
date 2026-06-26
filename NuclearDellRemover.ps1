@@ -116,6 +116,8 @@ if (-not $LoadOnly -and -not (Test-EngineIsAdministrator)) {
         if ($SkipSignatureVerification)  { $relaunchArgs += "-SkipSignatureVerification" }
         if ($SkipSecuritySuites)         { $relaunchArgs += "-SkipSecuritySuites" }
         if ($WhitelistFile)              { $relaunchArgs += @("-WhitelistFile", (& $quote $WhitelistFile)) }
+        if ($AuditDrift)                 { $relaunchArgs += @("-AuditDrift", (& $quote $AuditDrift)) }
+        if ($ExportIntuneScripts)        { $relaunchArgs += @("-ExportIntuneScripts", (& $quote $ExportIntuneScripts)) }
         if ($OEM)                        { $relaunchArgs += @("-OEM", $OEM) }
         if ($HardwareIdSeedsFile)        { $relaunchArgs += @("-HardwareIdSeedsFile", (& $quote $HardwareIdSeedsFile)) }
         if ($PSBoundParameters.ContainsKey('LogPath'))          { $relaunchArgs += @("-LogPath",          (& $quote $LogPath)) }
@@ -140,7 +142,9 @@ if (-not $LoadOnly -and -not (Test-EngineIsAdministrator)) {
 $Script:Config = @{
     Version                  = "1.5.0"
     StartTime                = Get-Date
-    SupportAssistMinVersion  = "3.2.0.90"  # N-able gate: skip SA if >= this unless -Force
+    # SupportAssist version gate removed in v1.5.1 — SA Remediation v5.5.16.0 caused
+    # CRITICAL_PROCESS_DIED BSOD loops (Dell KB000464214, May 2026). All SA versions
+    # are now processed for removal unconditionally.
     # Authenticode publishers we trust when running installers from %ProgramData%\Package Cache.
     # Subject strings are matched case-insensitively. Microsoft is included because some Dell/HP
     # first-party tools ship Microsoft-signed bootstrappers inside their Package Cache drop.
@@ -1147,7 +1151,8 @@ function Export-IntuneScriptPair {
 
     $detectionScript = @'
 # NuclearOEMRemover Intune Detection Script
-# Exits 0 + STDOUT if OEM bloatware is detected, exits 0 with no STDOUT if clean
+# Exit 1 = non-compliant (bloatware found, trigger remediation)
+# Exit 0 = compliant (clean, no action needed)
 '@ + "`n" + "`$patterns = @($appPatternsList)" + "`n" + "`$appxPatterns = @($appxPatternsList)" + @'
 
 $found = @()
@@ -1162,7 +1167,7 @@ foreach ($p in $appxPatterns) {
 }
 if ($found.Count -gt 0) {
     Write-Output "OEM bloatware detected: $($found -join ', ')"
-    exit 0
+    exit 1
 }
 exit 0
 '@
@@ -1490,16 +1495,9 @@ function Test-ShouldSkipSupportAssistByVersion {
         [object]$App,
         [AllowNull()][object]$ForceFlag = $Force
     )
-    if ([bool]$ForceFlag) { return $false }
-    if ($App.DisplayName -notlike "*SupportAssist*") { return $false }
-    if (-not $App.DisplayVersion) { return $false }
-    try {
-        $installed = [Version]$App.DisplayVersion
-        $gate      = [Version]$Script:Config.SupportAssistMinVersion
-        return ($installed -ge $gate)
-    } catch {
-        return $false
-    }
+    # Version gate removed — SA Remediation v5.5.16.0 caused BSOD loops (Dell KB000464214).
+    # All SupportAssist versions are now processed for removal unconditionally.
+    return $false
 }
 
 function Remove-OEMWin32Apps {
@@ -1554,13 +1552,6 @@ function Remove-OEMWin32Apps {
         if (Test-ShouldPreserveApp -App $app -Targets $Targets) {
             Write-RunLog "Preserving (KeepDellCommandUpdate): $($app.DisplayName)" -Level INFO
             Add-ReportItem -Phase "Win32" -Item $app.DisplayName -Status Skipped -Detail "Preserved by -KeepDellCommandUpdate"
-            continue
-        }
-
-        # Version-gate SupportAssist (N-able pattern) unless -Force
-        if (Test-ShouldSkipSupportAssistByVersion -App $app) {
-            Write-RunLog "Skipping $($app.DisplayName) $($app.DisplayVersion) - version >= gate ($($Script:Config.SupportAssistMinVersion)). Use -Force to override." -Level INFO
-            Add-ReportItem -Phase "Win32" -Item "$($app.DisplayName) $($app.DisplayVersion)" -Status Skipped -Detail "Version gate; pass -Force to override"
             continue
         }
 
