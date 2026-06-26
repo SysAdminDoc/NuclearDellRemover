@@ -132,7 +132,6 @@ Invoke-Pester -Path .\tests\NuclearDellRemover.Tests.ps1 -Output Detailed
 | Clear Residue | Drops OEM driver packages (`pnputil`), firewall rules, Defender exclusions, and pending BITS transfers. |
 | Keep Dell Command Update | Preserves DCU for BIOS/driver management and applies silent-mode lockdown keys so it stops popping up. |
 | Remove McAfee / Norton | Removes bundled McAfee and Norton security suite trials. Enabled by default. Uncheck to preserve. |
-| Force | Reserved for future use. |
 | Create Restore Point | Creates a System Restore checkpoint before live runs. Ignored in dry-run mode. |
 | Open Report | Opens the generated HTML report when the run finishes. |
 | Start Dry Run / Start Live Cleanup | Runs the selected cleanup profile with the current options. |

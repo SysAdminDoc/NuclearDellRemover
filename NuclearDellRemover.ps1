@@ -21,7 +21,8 @@ param(
     # Most sysadmins want DCU kept for BIOS/driver management while nuking everything else.
     [switch]$KeepDellCommandUpdate,
 
-    # Public: skip version-gate on SupportAssist (N-able pattern). Default gate = 3.2.0.90.
+    # Public: reserved for future use. The SupportAssist version gate was removed in v1.5.1
+    # (SA Remediation v5.5.16.0 caused BSOD loops — Dell KB000464214).
     [switch]$Force,
 
     # Public: skip creating a System Restore point before a live run.
@@ -373,14 +374,13 @@ $Script:OEMTargets = @{
         TaskFolders     = @("Lenovo")
         RegistryPaths   = @(
             "HKLM:\SOFTWARE\Lenovo", "HKLM:\SOFTWARE\Wow6432Node\Lenovo",
-            "HKCU:\SOFTWARE\Lenovo", "HKLM:\SOFTWARE\WOW6432Node\Lenovo"
+            "HKCU:\SOFTWARE\Lenovo"
         )
         RunKeyPatterns  = @("*Lenovo*")
         FilesystemPaths = @(
             "$env:ProgramData\Lenovo", "$env:LOCALAPPDATA\Lenovo",
             "$env:APPDATA\Lenovo", "C:\Program Files\Lenovo",
-            "C:\Program Files (x86)\Lenovo", "C:\ProgramData\Lenovo",
-            "C:\swtools"
+            "C:\Program Files (x86)\Lenovo", "C:\swtools"
         )
         StartMenuPatterns = @("*Lenovo*")
         ManualUninstallers = @(
@@ -3335,7 +3335,7 @@ function Invoke-NuclearOEMRemover {
     Write-RunLog "NuclearOEMRemover v$($Script:Config.Version) starting..." -Level INFO
     Write-RunLog "Log file: $LogPath" -Level INFO
     Write-RunLog "Target OEMs: $($targetOEMs -join ', ')" -Level INFO
-    Write-RunLog "Parameters: DryRun=$DryRun, KeepDCU=$KeepDellCommandUpdate, Force=$Force, SkipReinstallBlock=$SkipReinstallBlock, SkipFilesystemCleanup=$SkipFilesystemCleanup, SkipResidueCleanup=$SkipResidueCleanup, SkipSecuritySuites=$SkipSecuritySuites, SkipRestorePoint=$SkipRestorePoint" -Level INFO
+    Write-RunLog "Parameters: DryRun=$DryRun, KeepDCU=$KeepDellCommandUpdate, SkipReinstallBlock=$SkipReinstallBlock, SkipFilesystemCleanup=$SkipFilesystemCleanup, SkipResidueCleanup=$SkipResidueCleanup, SkipSecuritySuites=$SkipSecuritySuites, SkipRestorePoint=$SkipRestorePoint" -Level INFO
 
     # Pre-run inventory — snapshot of detected OEM artifacts before any changes
     $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
@@ -3936,9 +3936,6 @@ $xaml = @'
             <CheckBox x:Name="KeepDCUCheck" Style="{StaticResource PolishedCheck}" Content="Keep Dell Command Update (silenced)"/>
             <TextBlock Text="Preserves DCU for BIOS/drivers, silences popups." Foreground="{StaticResource Faint}" FontSize="12" Margin="24,-6,0,10"/>
 
-            <CheckBox x:Name="ForceCheck" Style="{StaticResource PolishedCheck}" Content="Force (bypass SupportAssist version gate)"/>
-            <TextBlock Text="Removes SupportAssist even if a recent version." Foreground="{StaticResource Faint}" FontSize="12" Margin="24,-6,0,10"/>
-
             <CheckBox x:Name="SecuritySuitesCheck" Style="{StaticResource PolishedCheck}" IsChecked="True" Content="Remove McAfee / Norton trials"/>
             <TextBlock Text="OEM-bundled security suites (LiveSafe, Norton 360)." Foreground="{StaticResource Faint}" FontSize="12" Margin="24,-6,0,10"/>
 
@@ -4079,7 +4076,7 @@ if (Test-Path $Script:IconPath) {
 $controlNames = @(
     "BrandImage", "HeaderStatus", "AutoRadio", "DellRadio", "HPRadio", "LenovoRadio", "AllRadio",
     "DryRunCheck", "BlockReinstallCheck", "FilesystemCheck", "ResidueCheck",
-    "KeepDCUCheck", "ForceCheck", "SecuritySuitesCheck", "RestorePointCheck", "OpenReportCheck", "RunSummary",
+    "KeepDCUCheck", "SecuritySuitesCheck", "RestorePointCheck", "OpenReportCheck", "RunSummary",
     "StartButton", "StopButton", "OpenReportButton", "OpenLogButton", "StatusTitle", "StatusBody",
     "RunProgress", "ProgressLabel", "LogBox", "ReportPathText", "FooterStatus",
     "PhaseProcesses", "PhaseServices", "PhaseAppx", "PhaseWin32", "PhaseTasks",
@@ -4301,7 +4298,6 @@ function Get-RunArguments {
     if (-not (Get-CheckState $ui.FilesystemCheck     -Default $true)) { $argumentList.Add("-SkipFilesystemCleanup") }
     if (-not (Get-CheckState $ui.ResidueCheck        -Default $true)) { $argumentList.Add("-SkipResidueCleanup") }
     if (Get-CheckState $ui.KeepDCUCheck)               { $argumentList.Add("-KeepDellCommandUpdate") }
-    if (Get-CheckState $ui.ForceCheck)                 { $argumentList.Add("-Force") }
     if (-not (Get-CheckState $ui.SecuritySuitesCheck -Default $true)) { $argumentList.Add("-SkipSecuritySuites") }
     if (-not (Get-CheckState $ui.RestorePointCheck   -Default $true)) { $argumentList.Add("-SkipRestorePoint") }
 
@@ -4324,7 +4320,6 @@ function Format-RunSummary {
     $filesystem = if (Get-CheckState $ui.FilesystemCheck     -Default $true) { "On" }              else { "Off" }
     $residue    = if (Get-CheckState $ui.ResidueCheck        -Default $true) { "On" }              else { "Off" }
     $keepDcu    = if (Get-CheckState $ui.KeepDCUCheck)                       { "Keep DCU" }        else { "Remove DCU" }
-    $force      = if (Get-CheckState $ui.ForceCheck)                         { "Force on" }        else { "Gated" }
     $secSuites  = if (Get-CheckState $ui.SecuritySuitesCheck -Default $true) { "McAfee/Norton on" } else { "Skip security suites" }
     $restore    = if (Get-CheckState $ui.RestorePointCheck   -Default $true) { "Restore-point on" } else { "No restore point" }
 
@@ -4336,7 +4331,6 @@ function Format-RunSummary {
         "Residue: $residue",
         $keepDcu,
         $secSuites,
-        $force,
         $restore
     )
 
@@ -4392,7 +4386,7 @@ function Set-RunningState {
     foreach ($control in @(
         $ui.AutoRadio, $ui.DellRadio, $ui.HPRadio, $ui.LenovoRadio, $ui.AllRadio,
         $ui.DryRunCheck, $ui.BlockReinstallCheck, $ui.FilesystemCheck, $ui.ResidueCheck,
-        $ui.KeepDCUCheck, $ui.ForceCheck, $ui.SecuritySuitesCheck, $ui.RestorePointCheck, $ui.OpenReportCheck
+        $ui.KeepDCUCheck, $ui.SecuritySuitesCheck, $ui.RestorePointCheck, $ui.OpenReportCheck
     )) {
         $control.IsEnabled = -not $Running
     }
@@ -4586,7 +4580,7 @@ function Open-Log {
 foreach ($control in @(
     $ui.AutoRadio, $ui.DellRadio, $ui.HPRadio, $ui.LenovoRadio, $ui.AllRadio,
     $ui.DryRunCheck, $ui.BlockReinstallCheck, $ui.FilesystemCheck, $ui.ResidueCheck,
-    $ui.KeepDCUCheck, $ui.ForceCheck, $ui.SecuritySuitesCheck, $ui.RestorePointCheck
+    $ui.KeepDCUCheck, $ui.SecuritySuitesCheck, $ui.RestorePointCheck
 )) {
     $control.Add_Click({ Update-RunSummary })
 }
