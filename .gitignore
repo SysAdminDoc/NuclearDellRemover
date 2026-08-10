@@ -4,6 +4,7 @@
 .vs/
 CLAUDE.md
 dist/
+.claude/
 
 # Markdown files local-only (except README)
 *.md
